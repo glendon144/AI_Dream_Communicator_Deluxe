@@ -1,0 +1,127 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# --- Defaults (you can override before running) ---
+: "${PIKIT_OPENAI_API_KEY:=}"                 # empty = no auth header
+: "${PIKIT_MODEL_NAME:=}"                     # if empty, we’ll pick the first listed
+: "${PIKIT_MAX_TOKENS_DEFAULT:=256}"
+CANDIDATES=("http://localhost:8081/v1" "http://localhost:8080/v1")
+
+curl_ok() {
+  # Usage: curl_ok <url> [auth_header]
+  local url="$1"; shift || true
+  local auth="${1:-}"
+  if [[ -n "$auth" ]]; then
+    curl -fsS -m 3 -H "Authorization: Bearer ${auth}" "$url" >/dev/null
+  else
+    curl -fsS -m 3 "$url" >/dev/null
+  fi
+}
+
+http_code() {
+  # Usage: http_code <url> [auth_header]
+  local url="$1"; shift || true
+  local auth="${1:-}"
+  if [[ -n "$auth" ]]; then
+    curl -s -o /dev/null -m 5 -w "%{http_code}" -H "Authorization: Bearer ${auth}" "$url"
+  else
+    curl -s -o /dev/null -m 5 -w "%{http_code}" "$url"
+  fi
+}
+
+pick_base_url() {
+  for base in "${CANDIDATES[@]}"; do
+    if curl_ok "${base}/models"; then
+      echo "$base"; return 0
+    fi
+  done
+  # Try with key if user already set one
+  if [[ -n "${PIKIT_OPENAI_API_KEY}" ]]; then
+    for base in "${CANDIDATES[@]}"; do
+      if curl_ok "${base}/models" "${PIKIT_OPENAI_API_KEY}"; then
+        echo "$base"; return 0
+      fi
+    done
+  fi
+  return 1
+}
+
+detect_auth_mode() {
+  local base="$1"
+  local code_no_key; code_no_key="$(http_code "${base}/models")" || code_no_key=000
+  if [[ "$code_no_key" == "200" ]]; then
+    echo "none"; return 0
+  fi
+  # If no-key didn’t work, try with key (supply default if not provided)
+  local key="${PIKIT_OPENAI_API_KEY:-sk-local}"
+  local code_with_key; code_with_key="$(http_code "${base}/models" "$key")" || code_with_key=000
+  if [[ "$code_with_key" == "200" ]]; then
+    echo "key:$key"; return 0
+  fi
+  echo "fail"; return 1
+}
+
+first_model_id() {
+  # Extract first "id" from /models JSON without jq
+  local base="$1"; shift || true
+  local key="${1:-}"
+  local out
+  if [[ -n "$key" ]]; then
+    out="$(curl -fsS "${base}/models" -H "Authorization: Bearer ${key}")"
+  else
+    out="$(curl -fsS "${base}/models")"
+  fi
+  # Grep the first id
+  echo "$out" | grep -o '"id":"[^"]\+"' | head -n1 | sed 's/^"id":"//; s/"$//'
+}
+
+# ---- Run detection ----
+BASE_URL="$(pick_base_url || true)"
+if [[ -z "${BASE_URL}" ]]; then
+  echo "❌ Could not reach LocalAI on 8081 or 8080 (/v1/models). Is it running?"
+  exit 1
+fi
+
+AUTH_MODE="$(detect_auth_mode "$BASE_URL" || true)"
+if [[ "$AUTH_MODE" == "none" ]]; then
+  USE_KEY=""
+elif [[ "$AUTH_MODE" == key:* ]]; then
+  USE_KEY="${AUTH_MODE#key:}"
+else
+  echo "❌ /models not accessible on ${BASE_URL} (with or without key)."
+  exit 1
+fi
+
+# Determine model
+if [[ -z "${PIKIT_MODEL_NAME}" ]]; then
+  if [[ -n "$USE_KEY" ]]; then
+    PIKIT_MODEL_NAME="$(first_model_id "$BASE_URL" "$USE_KEY")"
+  else
+    PIKIT_MODEL_NAME="$(first_model_id "$BASE_URL")"
+  fi
+fi
+
+if [[ -z "${PIKIT_MODEL_NAME}" ]]; then
+  echo "❌ No model ID found at ${BASE_URL}/models. Load a model in LocalAI first."
+  exit 1
+fi
+
+# ---- Export env & launch ----
+export PIKIT_OPENAI_BASE_URL="$BASE_URL"
+export PIKIT_MODEL_NAME
+export PIKIT_MAX_TOKENS_DEFAULT
+
+if [[ -n "$USE_KEY" ]]; then
+  export PIKIT_OPENAI_API_KEY="$USE_KEY"
+  echo "🔐 Using API key auth against ${BASE_URL}"
+else
+  unset PIKIT_OPENAI_API_KEY
+  echo "🔓 No API key required on ${BASE_URL}"
+fi
+
+echo "▶ Model: ${PIKIT_MODEL_NAME}"
+echo "▶ Max tokens default: ${PIKIT_MAX_TOKENS_DEFAULT}"
+
+cd "$HOME/src/FunKit"
+exec python3 main.py
+

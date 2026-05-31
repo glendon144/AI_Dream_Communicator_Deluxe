@@ -1,0 +1,223 @@
+Great plan. Below is a tightened, decision-oriented expansion with concrete defaults, acceptance criteria, and low-risk implementation details. If you confirm your lineage (Engelbart deep hypertext vs. P2P browser), I can tailor importers, link syntax, and the MVP demo script precisely.
+
+Recommended defaults to reduce decision thrash
+- Differentiator: Engelbart-style granular links and transclusions for local knowledge bases that remain stable across edits.
+- MVP workflows:
+  1) Create and share deep links into Markdown/HTML (paragraph/line/range anchors) that remain stable after edits.
+  2) View multiple synchronized lenses of the same document (outline + full text + backlinks) and perform transclusions.
+- Tech stack: Rust core + Tauri GUI + shared CLI/TUI (Ratatui). Plugins via JSON-RPC over stdio (language-agnostic, easy to version). Static-site exporter for shareable, read-only deep links on the web.
+
+1) Clarify value and scope
+- Crisp promise: “Stable, granular links and transclusions for your documents—links that don’t break when text moves.”
+- What uniquely good looks like:
+  - Deterministic, stable IDs at block/paragraph/sentence level.
+  - Range addressing with robust re-anchoring after edits (fuzzy matching).
+  - Multi-view lenses: outline, backlinks, and “transclusion pane.”
+- Acceptance criteria:
+  - Paste a deep link from Hyperscope into Slack/Docs; recipients can open the exact span later even after edits.
+  - Import a folder of Markdown and instantly navigate via generated outline/backlinks.
+  - Transclude a section of Doc A into Doc B and see live updates when A changes.
+- 3-minute demo script:
+  1) Open sample corpus; click “Deep Links 101.md.”
+  2) Copy link to paragraph 3; paste in a second window; navigate; highlight shows.
+  3) Edit document (move paragraphs); reopen the link; highlight snaps to the same logical paragraph.
+  4) Open split view: outline on left, text on right; click outline node; selection syncs.
+  5) Create a new note and transclude “Design/Addressing.md §Stability”; show it stays in sync.
+
+2) Technical strategy for a small, fast binary
+- Core language: Rust (memory safety, great parsers, small static binaries).
+- Architecture:
+  - hyperscope-core (no GUI):
+    - parsers: Markdown (pulldown-cmark), HTML5 (html5ever), OPML (quick-xml), JSON.
+    - segmenter/ID assigner: stable block IDs + sentence IDs; content-defined boundaries (rolling hash) plus heuristics to survive edits.
+    - re-anchoring: fuzzy locator using context windows + ID hint; diff-match-patch fallback.
+    - storage/index: SQLite (rusqlite) or sled for speed; initial index stored in .hs/index.db per workspace.
+    - addressing: hs:// scheme + fragment syntax; also file:// fallback with #g= anchor.
+    - export: HTML with embedded anchors and a tiny JS highlighter for ranges.
+  - hs-cli: import, index, link-create, link-resolve, export.
+  - hs-tui: Ratatui-based viewer (outline + text + backlinks).
+  - hs-gui: Tauri shell wrapping the core with native menus, system handlers for hs: links.
+- Plugin system:
+  - Transport: JSON-RPC 2.0 over stdio subprocess (like Language Server Protocol).
+  - Capabilities: content importers, renderers, link resolvers, commands.
+  - Versioning: semantic versioned Core API v1 (JSON schemas), feature flags.
+  - Security: capability manifest; plugins run with restricted FS access; no network unless granted.
+- WebAssembly companion:
+  - Build hyperscope-core-wasm for in-browser demo (read-only viewer + deep-links), but focus dev on the binary.
+- Performance budgets:
+  - Binary ≤ 50 MB macOS, ≤ 40 MB Linux; cold start ≤ 500 ms.
+  - Index 10k-line Markdown repo in ≤ 10 s; steady-state navigation latency ≤ 30 ms.
+
+3) Packaging and distribution that feel mainstream
+- Build matrix: macOS x64/arm64, Windows x64/arm64, Linux x64/arm64.
+- Tools:
+  - cargo-dist for cross-OS releases and artifacts.
+  - Tauri bundler for DMG/MSI/AppImage; Flatpak manifest via flatpak-builder.
+  - Homebrew formula (tap), Scoop manifest, winget package, apt repo later if demand.
+- Code signing/notarization:
+  - macOS: Developer ID cert + notarytool; hardened runtime.
+  - Windows: EV Code Signing cert + signtool + SmartScreen reputation build-up.
+  - Linux: detached signatures + SBOM; no root installers by default.
+- Auto-updates:
+  - Tauri’s autoUpdater with your signed channel for macOS/Windows.
+  - Linux: opt-in via AppImage update or Flatpak; respect distro policies.
+- Reproducibility:
+  - Deterministic builds with cargo dist; supply SHA256 and minisign/sigstore signatures.
+  - SBOM via cargo auditable and/or Syft; publish with releases.
+
+4) Compatibility and data pathways
+- Import:
+  - Legacy Hyperscope/Augment: implement a dedicated importer and link translator early; publish mapping rules.
+  - Markdown/HTML/OPML/JSON: initial set. For Markdown, support CommonMark + frontmatter metadata.
+- Export:
+  - HTML static site: preserves anchors, adds highlighting script for ranges, and “open in Hyperscope” buttons.
+  - Markdown with embedded stable IDs as HTML comments for round-tripping.
+- Addressing scheme:
+  - hs://workspace/doc?view=reader#b=g:PARA-GUID,s=offset..offset
+  - Back-compat: recognize legacy link syntax; translate to new scheme and store a redirect table.
+- Migration tool:
+  - hs-cli migrate --input <path> --legacy-type augment|hyperscope-old --dry-run
+  - Generates a report of translated links and mismatches.
+
+5) Product polish that reduces friction
+- First-run:
+  - Sample corpus: three short docs—Deep Links 101, Transclusion Showcase, Multi-View Tour.
+  - 60-second guided tour modal; “copy deep link” CTA appears contextually.
+- Defaults:
+  - Keyboard-first: vim-like and macOS-friendly shortcuts; quick-open (Cmd/Ctrl-P); command palette (Cmd/Ctrl-Shift-P).
+- Crash reporting/telemetry:
+  - Sentry or Glitchtip for crashes; opt-in toggle during onboarding; public schema and retention policy.
+- Performance monitoring:
+  - Built-in metrics panel (hidden) to show cold start, index time; for dev support.
+
+6) Security and privacy
+- No background daemons. Tauri sandbox; file access only after user selection (scoped directories).
+- Offline by default; network only for updates if opted in.
+- Supply SBOMs; CI runs cargo audit and osv-scanner; weekly dependency updates PRs.
+- Signed releases on all platforms.
+
+7) Engineering operations
+- CI/CD (GitHub Actions):
+  - Lint (clippy), fmt, unit/integration tests, wasm build check, fuzz corpus smoke test.
+  - Cross-compile, sign, notarize, upload artifacts on tag.
+- Testing:
+  - Golden tests for importers and anchor generation.
+  - Fuzz parsers and re-anchoring (cargo-fuzz); seed with real docs.
+  - Cross-platform UI smoke tests (Playwright with Tauri driver).
+- Process:
+  - Issue templates (bug, feature), discussion for proposals.
+  - Tiny RFCs for core API changes (one-pager: problem, design, migration).
+  - Release cadence: monthly minor; patch as needed; changelog with “migration notes.”
+
+8) Documentation and learning
+- Docs stack: Docusaurus or mdBook; host on GitHub Pages.
+- Quickstart: install, import folder, copy a deep link, share, export to web.
+- 10 task recipes:
+  - Make a paragraph link; link a text range; transclude; compare two versions; build backlinks; export static site; install plugin; write a plugin; VS Code command; intercept hs: links in browser.
+- “Deep Links 101” tutorial:
+  - Concepts: stable IDs, ranges, re-anchoring, link rot prevention.
+  - How it maps to Markdown/HTML.
+- API docs:
+  - JSON-RPC schemas with examples; example plugin repo (TypeScript and Rust); starter template.
+
+9) Community and governance
+- Keep core tiny; encourage plugins for importers/renderers/integrations.
+- Governance:
+  - Maintainers group; CODEOWNERS; weekly triage; public roadmap; “Good first issues.”
+  - DCO or CLA? Prefer DCO + CoC (e.g., Contributor Covenant).
+- Community:
+  - Monthly office hours on Zoom/Jitsi; recordings on YouTube; notes in repo.
+  - Plugin registry via a curated README and later a simple directory JSON.
+
+10) Awareness and adoption
+- Story: “Bring deep, stable links and transclusions to your knowledge base.”
+- Landing page:
+  - One-liner, three GIFs (deep link surviving edits, transclusion, multi-view), download buttons.
+- Launch playbook:
+  - Pre-brief a few friendly reviewers; publish to HN/Reddit/Dev.to; 3–5 minute demo video; short thread on X/BlueSky; crosspost to knowledge management communities.
+- Seed integrations:
+  - VS Code extension: “Copy deep link,” “Open hs: link,” inline decorations for anchors.
+  - Obsidian plugin: context menu for deep link; transclusion block.
+  - Browser extension: register hs: protocol handler; fallback resolver to local app via custom URL scheme.
+- Network effects:
+  - “Export to web” with shareable links that open in browser and suggest “Open in Hyperscope” if installed.
+
+11) Funding and sustainability
+- License:
+  - Core: MPL-2.0 (business-friendly, keeps improvements to core shared).
+  - Optional paid: team features (shared indexes, admin policy, SSO, managed updates).
+- Funding channels:
+  - GitHub Sponsors tiers; NLnet/NGI, Prototype Fund, Code for Science & Society microgrants.
+  - Plugin bounties for key importers (Notion/Confluence/OneNote).
+- Lightweight Pro plan:
+  - $5–10/month solo: priority updates, advanced export themes, power-user features.
+  - Team: per-seat, adds collaboration server later (not in MVP).
+
+Suggested 6‑month phased roadmap (expanded)
+- Month 0–1 (Foundations)
+  - Decide lineage (Engelbart default). Define MVP workflows and acceptance tests.
+  - Repos: hyperscope-core, hs-cli, hs-tui, hs-gui, plugins/examples, website/docs.
+  - Implement core: Markdown/HTML import, stable IDs, basic re-anchoring, SQLite index.
+  - TUI viewer with outline + text and “copy deep link.”
+  - CI: build matrix, tests, fuzz harness scaffold, cargo audit.
+  - Deliverable: pre-alpha CLI/TUI; resolves and opens deep links locally.
+
+- Month 2–3 (Productize)
+  - Tauri GUI with split views; hs:// protocol handler; copy/open links system-wide.
+  - Static exporter (HTML + anchors + highlighter).
+  - Packagers: DMG notarized, MSI with winget, AppImage + Flatpak; Homebrew/Scoop.
+  - Reproducible builds, code signing, SBOMs; crash reporting opt-in.
+  - Docs site, sample corpus, 60s onboarding.
+  - Early adopter pre-release; collect feedback on anchoring robustness.
+  - Deliverable: beta installers; landing page draft; demo data.
+
+- Month 4–5 (Ecosystem + quality)
+  - Plugin API v0 via JSON-RPC; example importers (OPML), formatter plugin.
+  - Accessibility pass; keyboard map solidified; performance pass on index and re-anchoring.
+  - Integrations: VS Code extension and Obsidian plugin.
+  - Browser extension for hs: protocol; telemetry schema published.
+  - Deliverable: RC build; 3 GIFs and demo video recorded.
+
+- Month 6 (Relaunch)
+  - 1.0 release with installers; landing page live.
+  - Launch campaign; office hours kickoff; roadmap published.
+  - Establish monthly releases; triage routine; solicit plugin proposals/bounties.
+
+KPIs and guardrails
+- Functionality:
+  - ≥ 95% of deep links survive typical edits in test corpus (move, split, merge, typo).
+  - Index time: ≤ 10 s for 1,000 Markdown files (~10 MB total).
+- UX:
+  - Cold start ≤ 500 ms; deep link open ≤ 300 ms.
+  - Onboarding completion rate ≥ 60% for new installs (opt-in metrics).
+- Adoption:
+  - 1k downloads in 30 days post-launch; 3+ community plugins in 60 days.
+- Quality:
+  - Crash-free sessions ≥ 99%; zero critical security advisories open > 7 days.
+
+Risk mitigations
+- Plugin ABI churn: fix by JSON-RPC schemas and feature flags; avoid in-process ABI until 2.0.
+- Code signing friction: start application now for Apple/Windows certs; use a CI secret rotation plan.
+- Anchoring edge cases: ship a “Report bad anchor” tool with anonymized diff capture (opt-in) and build a fuzz corpus.
+
+Concrete link/addressing proposal (initial)
+- Scheme: hs://workspace/doc-id#b=<BLOCK_GUID>&r=<START..END>&v=<VIEW>
+  - BLOCK_GUID is a stable 128-bit hex derived from normalized text and structural context.
+  - r is character offsets within the block; optional.
+  - Fallback for web export: https://your-site/doc#b=<BLOCK_GUID>&r=... with JS to highlight and scroll.
+- ID generation:
+  - Normalize whitespace; compute rolling hash for boundaries; GUID = hash(block_text + parent_outline_path).
+  - Store a sidecar .hsids.json mapping for plaintext formats to avoid modifying files.
+- Re-anchoring:
+  - Attempt GUID match; if missing, fuzzy match with context window (prev/next block hashes, top-k text shingles).
+
+Team and effort (minimal viable team)
+- 1 senior Rust engineer (core/index/anchoring).
+- 1 app engineer (Tauri + integrations).
+- 0.5 dev rel/PM (docs, landing page, release ops).
+- Contractors/volunteers for plugins and packaging help.
+
+Open question to tailor precisely
+- Which Hyperscope lineage are you targeting?
+  - Engelbart-style granular hypertext: we proceed as above; prioritize import/migration and deep link stability.
+  - SSB/Hypercore P2P browser: we would swap storage/index for append-only logs, prioritize offline replication, add identity/feeds, and choose different flagship workflows (e.g., offline share and verify).

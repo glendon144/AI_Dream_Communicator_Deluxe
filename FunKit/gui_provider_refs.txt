@@ -1,0 +1,4 @@
+1:from modules.provider_dropdown import ProviderDropdown
+92:# Grid-safe ProviderSwitcher (no pack; tolerant of return shapes)
+94:class ProviderSwitcher_DEPRECATED(ttk.Frame):
+343:        self.provider_switch = ProviderDropdown(self.topbar, status_cb=getattr(self, "status", None))

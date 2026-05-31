@@ -1,0 +1,60 @@
+     1	import os
+     2	import threading
+     3	import tkinter as tk
+     4	from tkinter import ttk, filedialog, simpledialog, messagebox
+     5	from pathlib import Path
+     6	from PIL import ImageTk, Image
+     7	import subprocess
+     8	import sys
+     9	import json
+    10	import re
+    11	import xml.etree.ElementTree as ET
+    12	
+    13	# FunKit modules (all live under ./modules)
+    14	from modules.provider_switch import list_labels, set_current_provider, get_current_provider
+    15	from modules import hypertext_parser, image_generator, document_store
+    16	from modules.renderer import render_binary_as_text
+    17	from modules.logger import Logger
+    18	from modules.directory_import import import_text_files_from_directory
+    19	from modules.TreeView import open_tree_view
+    20	# OPML extras plugin (menu, hotkeys, toolbar buttons, engine helpers)
+    21	from modules.opml_extras_plugin import (
+    22	    install_opml_extras_into_app,
+    23	    _resolve_engine,
+    24	    _decode_bytes_best,
+    25	)
+    26	
+    27	SETTINGS_FILE = Path("funkit_settings.json")
+    28	
+    29	
+    30	# ---- network helper (thread-safe: no Tk/SQLite here) ----
+    31	def fetch_html_with_fallback(url, max_bytes, connect_to, read_to, budget_s):
+    32	    """Do the network I/O only. Returns decoded HTML as str."""
+    33	    import time, socket
+    34	    start = time.monotonic()
+    35	
+    36	    headers = {
+    37	        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+    38	                      "(KHTML, like Gecko) Chrome/122.0 Safari/537.36 FunKit/OPML",
+    39	        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+    40	        "Accept-Language": "en-US,en;q=0.9",
+    41	        "Connection": "close",
+    42	    }
+    43	
+    44	    # Try requests if available
+    45	    try:
+    46	        import requests
+    47	        with requests.get(url, headers=headers, timeout=(connect_to, read_to),
+    48	                          stream=True, allow_redirects=True) as r:
+    49	            r.raise_for_status()
+    50	            ctype = (r.headers.get("Content-Type") or "").lower()
+    51	            if "text/html" not in ctype and "xml" not in ctype:
+    52	                raise RuntimeError(f"Unsupported Content-Type: {ctype or 'unknown'}")
+    53	            raw = bytearray()
+    54	            for chunk in r.iter_content(chunk_size=65536):
+    55	                if chunk:
+    56	                    raw.extend(chunk)
+    57	                if len(raw) > max_bytes or (time.monotonic() - start) > budget_s:
+    58	                    break
+    59	        return _decode_bytes_best(bytes(raw))
+    60	    except Exception:

@@ -1,0 +1,25 @@
+
+
+
+
+
+#!/usr/bin/env bash
+set -Eeuo pipefail
+export PIKIT_OPENAI_BASE_URL="http://localhost:8081/v1"
+export PIKIT_OPENAI_API_KEY="funkit-local"
+export PIKIT_MODEL_NAME="mistral-7b-instruct"
+export PIKIT_MAX_TOKENS_DEFAULT=256
+export PIKIT_REQUEST_TIMEOUT=600
+export PIKIT_DEBUG=1
+
+# Show what the adapter sees
+python3 - <<'PY'
+import os, sys, json
+sys.path.insert(0, os.path.abspath('modules'))
+from ai_interface import AIInterface
+ai = AIInterface()
+print(">>> ADAPTER CONFIG", json.dumps(ai.get_config(), indent=2))
+PY
+
+exec python3 main.py
+

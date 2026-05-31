@@ -1,0 +1,49 @@
+# OS / editor junk
+.DS_Store
+Thumbs.db
+*.swp
+
+# Python artefacts
+*.pyc
+__pycache__/
+# local docs
+
+exported_docs/
+backup_exported_docs/
+
+
+# Virtual-envs
+.venv/
+venv/
+myenv*/
+pikit-env/
+.env/
+
+# Local binaries / wheels
+*.whl
+*.pyd
+# build directories
+dist/
+build/
+# Databases & cache
+storage/*.db
+
+# Secrets
+credentials/
+
+exported_docs/docs.json
+exported_docs
+openai.key
+exported_docs/
+OpenAI.key
+document_*.txt
+*.patch
+*.bak
+*.new
+*.diff
+fb_*token.txt
+dist/
+build/
+mistral-token
+exported_docs/
+backup_exported_docs/

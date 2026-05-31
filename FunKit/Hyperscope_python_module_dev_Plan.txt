@@ -1,0 +1,234 @@
+Great—below is a practical expansion centered on an Engelbart-style core that is equally usable as middleware and as a Python library installable via pip. I’ve focused on the parts that make it uniquely valuable to developers embedding it, while preserving an end-user app story.
+
+1) What “middleware-capable” means in practice
+- Design targets:
+  - Library-first core: a stable Rust API with C-ABI and Python bindings. Everything the GUI/CLI uses is available as embeddable APIs.
+  - No required daemon: all operations are synchronous or short-lived async jobs that can be driven by host apps.
+  - Stateless helpers + local workspace state: index lives in a workspace path; callers choose where it sits and when to update it.
+- Developer surfaces:
+  - Rust crate: hyperscope-core for native integrations.
+  - C-ABI shared library: libhyperscope for other languages (optional later).
+  - Python package: hyperscope (PyO3 + maturin), with typed stubs.
+  - JSON-RPC process plugin protocol for language-agnostic extensions.
+  - A tiny browser JS library for static exports to resolve and highlight anchors.
+
+2) Core data model and addressing (deeper)
+- Units:
+  - Document: a loaded resource with a stable doc_id (UUID or content hash plus path metadata).
+  - Block: paragraphs, headings, list items, code fence blocks; each has a block_guid stable across edits.
+  - Inline span: ranges inside a block, defined in normalized grapheme indices.
+  - Sentence: optional granular unit within a block for fine-grained links or annotations.
+- Address form (canonical):
+  - hs://workspace/doc-id#b=<BLOCK_GUID>&r=<start..end>&v=<view>
+  - start/end are grapheme offsets within normalized block text; r omitted means whole block.
+  - workspace can be a label resolved to a local path or a content store profile.
+- Web fallback:
+  - https://site/doc-slug#b=<BLOCK_GUID>&r=... with client JS to scroll/highlight; adds a visible “Open in Hyperscope” action if app is installed.
+- Stability rules:
+  - Block_GUID derived from normalized text + structural lineage, not absolute line numbers.
+  - Block boundaries determined via content-defined chunking; edits that move blocks preserve GUIDs; splits/merges attempt GUID carryover with lineage hints.
+
+3) Stable ID generation (concrete)
+- Normalization:
+  - Unicode NFC; collapse runs of whitespace; trim leading/trailing; remove purely decorative markup; preserve semantic markers (heading level, list nesting).
+- Boundaries:
+  - Content-defined boundaries using rolling hash (Rabin-Karp or Gear) on normalized text with target window ~256 bytes for blocks; heuristics to keep headings and code fences as hard boundaries.
+- GUID derivation:
+  - blake3-128 of: normalized_block_text + parent_outline_path + block_kind + heading_path_hash.
+  - Store in index; optionally cache sidecar mapping for plaintext files (.hsids.json) to accelerate re-anchoring and allow round-trip without modifying files.
+- Sentence IDs:
+  - Optional; split via rule-based sentence boundary detection; sentence_guid = blake3-128 of sentence_text + block_guid.
+
+4) Re-anchoring algorithm (robustness details)
+- Inputs: a link with block_guid and optional r, plus a document version that may have changed.
+- Steps:
+  1) Direct hit: lookup block_guid in current index for doc; if present, return exact block; adjust range r to current normalized text via diff-aware mapping.
+  2) GUID miss fallback:
+     - Neighborhood index: use stored predecessor/successor block shingles or hashes; search the doc for the best-scoring window based on:
+       - Jaccard similarity over token shingles
+       - Sequence alignment score (Smith-Waterman or a trimmed diff-match-patch)
+       - Heading lineage similarity
+     - Tie-breakers: prefer same heading lineage depth; prefer minimal edit distance; prefer unchanged neighbors.
+  3) Range mapping:
+     - If original r exists, compute token-based anchors around r (prefix/suffix contexts of N tokens each) and remap onto new block text using approximate substring search; if fails, fallback to bounding sentence(s).
+  4) Confidence score:
+     - Return anchor with confidence in [0,1]; UIs can warn on low confidence; API can request strict-only resolution.
+- Performance:
+  - Maintain a per-doc inverted index of token shingles and a locality-sensitive hash to shortlist candidate blocks in O(log n) average.
+  - Aim 95% link survival on typical edit patterns; capture difficult cases via opt-in telemetry fuzzer.
+
+5) SQLite schema (initial)
+- docs(id, workspace_id, path, mtime, size, content_hash, title, format)
+- blocks(id, doc_id, ordinal, guid, kind, heading_level, parent_outline_path_hash, text_norm_hash, text_norm, byte_start, byte_end)
+- sentences(id, block_id, ordinal, guid, text_norm_hash, start, end)
+- backlinks(block_guid, target_doc_id, target_block_guid, relation, created_at)
+- tokens(doc_id, block_id, term, position) with indexes for shingle queries
+- links(source, target, r_start, r_end, created_at, metadata_json)
+- sidecars(doc_id, path, version, content_json)
+- meta(key, value)
+
+6) Python package design (pip)
+- Packaging:
+  - PyO3-based bindings; build with maturin; ship manylinux, macOS universal2, Windows wheels; include musl wheels for Alpine if feasible.
+  - Package name: hyperscope. Optional extras: hyperscope[watch], hyperscope[wasm] for dev.
+- Python API sketch:
+  - open_workspace(path) -> Workspace
+  - Workspace.import_folder(path, patterns=[“**/*.md”, “**/*.html”])
+  - Workspace.index(progress_cb=None)
+  - Workspace.resolve(link_str, strict=False) -> AnchorResult {doc_path, block_guid, range, confidence}
+  - Workspace.create_link(doc_path, position={block_guid|cursor}, range=None, view=None) -> hs:// URL
+  - Workspace.transclude(src_link, dst_doc_path, mode=“live|snapshot”) -> TransclusionHandle
+  - Workspace.backlinks(doc_path or block_guid) -> iterable of Link
+  - Workspace.export_static(out_dir, site_url, theme=“default”)
+  - Workspace.search(query, scope=“blocks|sentences”, k=50)
+  - Workspace.watch(callback) to get file updates and reindex; implemented with watchdog on Python side calling into core.
+- Embedding examples:
+  - Jupyter: magic function to copy deep link for a selected cell/line; render highlight in notebook output using the JS library.
+  - Sphinx/MkDocs: plugin that resolves hs:// links at build time, injecting anchors and “open in app” buttons.
+  - FastAPI/Django: service that resolves incoming hs URLs to HTML fragments; useful for internal portals.
+
+7) CLI/TUI concrete commands
+- hs-cli:
+  - hs init <workspace>
+  - hs import <folder> --patterns “**/*.md,**/*.html”
+  - hs index [--clean]
+  - hs link create <file> --block <guid>|--line <n> [--range a..b] [--view reader]
+  - hs link resolve “hs://…” [--strict] [--json]
+  - hs backlinks <file|guid> [--json]
+  - hs export <out_dir> --site-url https://…
+  - hs migrate --input <path> --legacy-type augment|hyperscope-old --dry-run
+- hs-tui:
+  - Split view: outline | text | backlinks; key to copy deep link; search; jump to anchor.
+
+8) Tauri GUI expansion
+- Multi-view synchronization:
+  - Shared selection model bound to current anchor; clicking outline selects block; selecting text updates a draft deep link in UI.
+- Transclusion pane:
+  - Drop a link to show live transclusion; highlight changes when source updates; tooltip with confidence if re-anchored.
+- System integration:
+  - Register hs:// handler; paste into Slack/Docs opens app at exact anchor; if app not running, cold start target ≤ 500 ms.
+
+9) Static export details
+- HTML generation:
+  - Add id=”hs-b-<BLOCK_GUID>” to blocks; data attributes for sentence ids if enabled.
+  - Insert tiny script (~4–6 KB gzipped) that:
+    - Parses fragment b and r
+    - Locates block(s), highlights range using grapheme mapping
+    - Scrolls into view and adds a “Open in Hyperscope” button using custom protocol hs:// or a bridge endpoint
+- Link rewriting:
+  - hs:// links rewritten to https fallback with original anchor params preserved; optional site-relative to keep portability.
+- SEO/permastability:
+  - Also emit hash-based legacy anchors for headings (#section-title) to keep normal navigation unaffected.
+
+10) Plugin protocol (JSON-RPC over stdio)
+- Handshake:
+  - initialize -> returns capabilities {importers, renderers, resolvers, commands}, plugin_name, version, required_features
+- Core calls:
+  - import_doc {uri, bytes, format_hint} -> {blocks[], metadata}
+  - render_block {block} -> {html_fragment}
+  - resolve_legacy_link {string} -> {hs_url}
+  - execute_command {name, args} -> {result}
+- Events:
+  - on_indexed {doc_id, stats}; on_transclusion_update {target, src_anchor}
+- Versioning and safety:
+  - JSON Schemas published and versioned; plugins declare min_core_version, feature flags.
+  - Capability manifest and working dir sandboxing; no network by default.
+
+11) Transclusion semantics (clear rules)
+- Modes:
+  - Live: reference resolves on view/render; always current; show “source updated” indicators if target drifted with confidence < threshold.
+  - Snapshot: stores resolved HTML or markdown with provenance metadata; can be re-synced on demand.
+- Cycle handling:
+  - Detect cycles via resolving graph; cutoff depth with a render note; users can override per transclusion.
+- Styling:
+  - Transcluded blocks carry a subtle border and source link; respect host doc theme.
+
+12) Performance implementation notes
+- Indexing:
+  - Streaming parsers (pulldown-cmark, html5ever) to avoid large allocations.
+  - Tokenization via unicode-segmentation and minimal stemming; BLAKE3 for fast hashing.
+- Query:
+  - SQLite prepared statements; indexes on guid, doc_id+ordinal, term postings; pragma tuning for WAL mode.
+- Re-anchoring:
+  - Fast shortlist via minhash or simhash buckets; only run expensive diff on top-k candidates.
+- Budgets (as given):
+  - Binary size and latency budgets enforced via CI perf tests.
+
+13) Security, privacy, reproducibility (developer emphasis)
+- No network without opt-in; update checks disabled by default on first run.
+- SBOMs produced and shipped; cargo audit and osv-scanner in CI; weekly dep bumps.
+- Reproducible builds: cargo-dist with locked dependencies; provide SHA256 and sigstore/minisign signature files.
+- Code signing on platforms; hardened runtime on macOS; Windows EV cert.
+
+14) Testing deeper
+- Golden fixtures:
+  - Corpus of Markdown/HTML with deliberate edits (move, split, merge, synonym, punctuation tweaks); expected re-anchoring outputs with confidence thresholds.
+- Fuzzing:
+  - Parser fuzz; anchor fuzz with randomized edits; seed from public docs.
+- Unit/integration:
+  - ID stability under noop changes; range mapping across unicode grapheme changes; link migration from legacy syntaxes.
+- UI smoke tests:
+  - Navigator actions, copy link, open link, transclusion update behavior; cross-platform via Playwright+Tauri driver.
+
+15) Documentation and dev onboarding
+- Python docs:
+  - Getting started: pip install hyperscope; minimal snippet to index a folder and resolve a link.
+  - Recipes: integrate with MkDocs; build a Slack bot to unfurl hs links; Jupyter extension to transclude.
+- Core API:
+  - Rust docs and JSON-RPC schema with examples; example plugin repos in TypeScript and Rust.
+- Deep Links 101:
+  - Visual explainer of block GUIDs, re-anchoring flows, and what happens under different edit types.
+
+16) Adoption accelerators for developers
+- VS Code extension:
+  - Commands: Copy deep link; Open hs link; Show anchors; Decorations for stable IDs; Inline transclusion preview.
+- Obsidian plugin:
+  - Context menu: Copy deep link; Transclude block; Live update badge.
+- Browser extension:
+  - Register hs:// protocol; detect fallback params in https pages; button to “Open in Hyperscope.”
+
+17) Python integration examples (short)
+- Slack/Discord unfurl:
+  - Bot extracts hs URL; calls Workspace.resolve; posts a snippet with title and highlighted quote; links back to open app.
+- Knowledge portal:
+  - Use Workspace.export_static nightly; site serves stable, highlightable anchors; internal users with app get “open locally” deep link.
+- Data pipelines:
+  - Use Python to pre-index docs generated by CI; emit a mapping report of changed anchors post-build.
+
+18) Roadmap tasks clarified for Python/middleware
+- Month 0–1:
+  - Define C-ABI layer and PyO3 wrapper; produce minimal pip wheels; Python quickstart docs.
+  - Workspace indexing, link create/resolve; sidecar mapping on.
+- Month 2–3:
+  - Static exporter JS; hs:// protocol handler; VS Code early extension; publish wheels for macOS/Linux/Windows.
+- Month 4–5:
+  - Plugin protocol v0 and example importers in TS; Django/FastAPI example repo; MkDocs plugin alpha.
+- Month 6:
+  - API freeze v1 for core JSON-RPC and Python; commit to semantic versioning and deprecation windows.
+
+19) KPIs expanded for developer adoption
+- Library:
+  - ≥ 70% of downloads via pip or npm (JS viewer) result in at least one successful link resolve in 7 days.
+  - 3+ embeddings (MkDocs/Sphinx/Slack bot) built by community in 60 days.
+- Stability:
+  - Link survival ≥ 95% on test corpus; median resolve < 30 ms; p95 < 120 ms.
+- Package health:
+  - Wheels available for 90%+ of common platforms; import time < 100 ms.
+
+20) Risks and mitigations (dev angle)
+- Python packaging complexity:
+  - Use maturin action and cibuildwheel; prebuild wheels; provide source-only fallback with clear error if Rust toolchain missing.
+- ABI stability:
+  - Keep Python API stable; hide experimental functions behind feature flags; document breaking changes with migration notes.
+- Re-anchoring false positives:
+  - Ship confidence signaling; API flag strict mode; one-click “Report bad anchor” to collect anonymized diffs.
+
+21) Open questions to finalize
+- Which minimum Python versions to support (3.9+ recommended)?
+- Should we embed the static export JS inline or load as a small external asset for caching?
+- Do we need a pure-Python fallback for environments where native builds are blocked, or is Rust-only acceptable for v1?
+
+If helpful, I can draft:
+- The sidecar .hsids.json schema.
+- The JSON-RPC initialize and import_doc request/response examples.
+- A minimal Python quickstart snippet and a Slack unfurl bot example.

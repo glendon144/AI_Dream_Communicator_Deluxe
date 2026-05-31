@@ -1,0 +1,1 @@
+export BASETEN_API_KEY=`cat ~/openai.key`

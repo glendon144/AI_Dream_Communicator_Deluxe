@@ -1,0 +1,18 @@
+; FunKit configuration (INI)
+; Copy this to ~/.funkit/funkit.conf (create the directory if needed).
+
+[core]
+provider = baseten
+
+[openai]
+api_key = 
+
+[baseten]
+url = https://inference.baseten.co/v1
+model = openai/gpt-oss-120b
+api_key = YOUR_API_KEY
+transport = auto
+endpoint_mode = base
+
+[local]
+; endpoint = http://localhost:11434/v1

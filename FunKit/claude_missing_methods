@@ -1,0 +1,47 @@
+Based on your original code, here are all the methods you still need to add to the reorganized file:Here's the complete list of methods you need to add to your reorganized class:
+
+**Core Methods (23 methods total):**
+
+1. **TreeView Integration (2 methods):**
+   - `on_tree_button()`
+   - `_apply_opml_expand_depth()`
+
+2. **AI/Tri-Model (1 method):**
+   - `ask_tri_action()`
+
+3. **OPML Handling (6 methods):**
+   - `_ensure_opml_widgets()`
+   - `_show_opml()`
+   - `_hide_opml()`
+   - `_render_opml_from_string()`
+   - `_opml_expand_to_depth_in_pane()`
+   - `_opml_update_numbering()`
+
+4. **Image Operations (3 methods):**
+   - `_looks_like_image()`
+   - `_show_image_bytes()`
+   - `_hide_image()`
+
+5. **Import/Export (6 methods):**
+   - `_import_doc()`
+   - `_export_doc()`
+   - `_import_directory()`
+   - `export_and_launch_server()`
+   - `_save_binary_as_text()`
+   - `_open_opml_from_main()`
+
+6. **Utility (1 method):**
+   - `destroy()` (override for cleanup)
+
+**Helper Functions (outside the class):**
+- `sanitize_doc()`
+- `_render_document_v2()` (if it exists in your original)
+
+**To complete your file:**
+
+1. Copy each of these methods from your original file
+2. Add them to the bottom of the reorganized class structure I provided
+3. Make sure to maintain the proper indentation
+4. Keep any helper functions outside the class at the very end
+
+The reorganized structure + these missing methods should give you a fully functional GUI without the AttributeError issues!

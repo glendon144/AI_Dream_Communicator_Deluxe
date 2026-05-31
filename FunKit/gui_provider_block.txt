@@ -1,0 +1,61 @@
+import os
+import threading
+import tkinter as tk
+from tkinter import ttk, filedialog, simpledialog, messagebox
+from pathlib import Path
+from PIL import ImageTk, Image
+import subprocess
+import sys
+import json
+import re
+import xml.etree.ElementTree as ET
+
+# FunKit modules (all live under ./modules)
+from modules.provider_switch import list_labels, set_current_provider, get_current_provider
+from modules import hypertext_parser, image_generator, document_store
+from modules.renderer import render_binary_as_text
+from modules.logger import Logger
+from modules.directory_import import import_text_files_from_directory
+from modules.TreeView import open_tree_view
+# OPML extras plugin (menu, hotkeys, toolbar buttons, engine helpers)
+from modules.opml_extras_plugin import (
+    install_opml_extras_into_app,
+    _resolve_engine,
+    _decode_bytes_best,
+)
+
+SETTINGS_FILE = Path("funkit_settings.json")
+
+
+# ---- network helper (thread-safe: no Tk/SQLite here) ----
+def fetch_html_with_fallback(url, max_bytes, connect_to, read_to, budget_s):
+    """Do the network I/O only. Returns decoded HTML as str."""
+    import time, socket
+    start = time.monotonic()
+
+    headers = {
+        "User-Agent": "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+                      "(KHTML, like Gecko) Chrome/122.0 Safari/537.36 FunKit/OPML",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Connection": "close",
+    }
+
+    # Try requests if available
+    try:
+        import requests
+        with requests.get(url, headers=headers, timeout=(connect_to, read_to),
+                          stream=True, allow_redirects=True) as r:
+            r.raise_for_status()
+            ctype = (r.headers.get("Content-Type") or "").lower()
+            if "text/html" not in ctype and "xml" not in ctype:
+                raise RuntimeError(f"Unsupported Content-Type: {ctype or 'unknown'}")
+            raw = bytearray()
+            for chunk in r.iter_content(chunk_size=65536):
+                if chunk:
+                    raw.extend(chunk)
+                if len(raw) > max_bytes or (time.monotonic() - start) > budget_s:
+                    break
+        return _decode_bytes_best(bytes(raw))
+    except Exception:
+        pass

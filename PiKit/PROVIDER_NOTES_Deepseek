@@ -1,0 +1,11 @@
+## DeepSeek Provider
+
+DeepSeek support is wired through the OpenAI-compatible client.
+
+Defaults:
+- provider: deepseek
+- base_url: https://api.deepseek.com
+- model: deepseek-v4-flash
+- key source: DEEPSEEK_API_KEY or ~/deepseek_key
+
+If the API returns an insufficient balance error, the integration is reaching DeepSeek successfully; add credits before further testing.

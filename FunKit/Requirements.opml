@@ -1,0 +1,65 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<opml version="2.0">
+  <head><title>Converted</title></head>
+  <body>
+<outline text="aiohappyeyeballs==2.6.1" />
+<outline text="aiohttp==3.12.13" />
+<outline text="aiosignal==1.3.2" />
+<outline text="annotated-types==0.7.0" />
+<outline text="anyio==4.9.0" />
+<outline text="async-timeout==5.0.1" />
+<outline text="attrs==25.3.0" />
+<outline text="cachetools==5.5.2" />
+<outline text="certifi==2025.6.15" />
+<outline text="charset-normalizer==3.4.2" />
+<outline text="cycler==0.12.1" />
+<outline text="distro==1.9.0" />
+<outline text="exceptiongroup==1.3.0" />
+<outline text="fonttools==4.58.4" />
+<outline text="frozenlist==1.7.0" />
+<outline text="google-api-core==2.25.1" />
+<outline text="google-api-python-client==2.172.0" />
+<outline text="google-auth==2.40.3" />
+<outline text="google-auth-httplib2==0.2.0" />
+<outline text="google-auth-oauthlib==1.2.2" />
+<outline text="googleapis-common-protos==1.70.0" />
+<outline text="h11==0.16.0" />
+<outline text="httpcore==1.0.9" />
+<outline text="httplib2==0.22.0" />
+<outline text="httpx==0.28.1" />
+<outline text="idna==3.10" />
+<outline text="jiter==0.10.0" />
+<outline text="kiwisolver==1.4.7" />
+<outline text="matplotlib==3.5.3" />
+<outline text="multidict==6.4.4" />
+<outline text="networkx==2.8.8" />
+<outline text="numpy==1.21.6" />
+<outline text="oauthlib==3.2.2" />
+<outline text="openai==0.28.1" />
+<outline text="packaging==25.0" />
+<outline text="pandas==1.1.5" />
+<outline text="pillow==11.2.1" />
+<outline text="propcache==0.3.2" />
+<outline text="proto-plus==1.26.1" />
+<outline text="protobuf==6.31.1" />
+<outline text="pyasn1==0.6.1" />
+<outline text="pyasn1_modules==0.4.2" />
+<outline text="pydantic==2.11.7" />
+<outline text="pydantic_core==2.33.2" />
+<outline text="pyparsing==3.2.3" />
+<outline text="python-dateutil==2.9.0.post0" />
+<outline text="pytz==2025.2" />
+<outline text="requests==2.32.4" />
+<outline text="requests-oauthlib==2.0.0" />
+<outline text="rsa==4.9.1" />
+<outline text="scipy==1.9.1" />
+<outline text="six==1.17.0" />
+<outline text="sniffio==1.3.1" />
+<outline text="tqdm==4.67.1" />
+<outline text="typing-inspection==0.4.1" />
+<outline text="typing_extensions==4.14.0" />
+<outline text="uritemplate==4.2.0" />
+<outline text="urllib3==2.4.0" />
+<outline text="yarl==1.20.1" />
+  </body>
+</opml>

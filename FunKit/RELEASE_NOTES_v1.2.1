@@ -1,0 +1,140 @@
+🌐 URL → OPML (v1.2.1)
+
+Turn any web page into a clean, navigable OPML outline — in one click.
+No clutter. No ads. Just the structure.
+
+Why this is exciting
+
+⚡ Fast signal extraction: Skip the noise and scan a page as an outline.
+
+🧭 Instant navigation: Expand/collapse headings with carets right in FunKit.
+
+🧰 Portable: OPML plays nicely with other outline tools.
+
+How to use it
+
+Option A — Toolbar
+
+Click URL → OPML.
+
+Paste one or more URLs (newline-separated).
+
+Press OK. The first outline opens automatically; others appear in the index.
+
+Option B — Menu
+
+File → Import URL → OPML (same dialog as above)
+
+Batch import: paste multiple URLs at once — each becomes its own OPML document.
+
+Modes & control
+
+Tools → Network/URL → URL Import Mode
+
+Quick (default): ~12s total / ~600 KB per URL
+
+Full: ~25s total / ~2.5 MB per URL
+
+🛑 Cancelable: A small “Fetching URLs…” dialog lets you Cancel mid-import.
+
+🧵 Responsive: Fetch runs in the background; the UI stays snappy.
+
+💾 Safe writes: All database updates happen on the main thread (no SQLite thread errors).
+
+What gets saved
+
+✅ New OPML documents titled like: Example Page Title (OPML)
+
+🔒 Original HTML is not stored (we harvest structure, not the entire page)
+
+Rendering & navigation
+
+🪄 OPML opens in the main pane with caret expand/collapse.
+
+⬅️ Back returns to your previous document.
+
+🔍 Use the Tree view anytime for a dedicated outline window.
+
+Smart fallbacks
+
+Some sites are heavy or defensive (big publisher CDNs, paywalls, etc.). We handle that:
+
+🧠 HTML → OPML (primary path)
+
+✨ Text fallback when HTML is tricky — still produces a useful outline
+
+🧪 Validation: OPML is parsed in-memory before saving; leading noise is trimmed
+
+🛠️ Repair tools:
+
+Tools → Repair current doc → OPML (overwrite)
+
+Batch: Repair selected OPML docs (toolbar)
+
+Tips for great outlines
+
+Prefer article / reader URLs when possible (less nav/UI chrome).
+
+Multi-URL imports are supported — each URL on its own line.
+
+For very stubborn sites, try Quick mode first; if needed, switch to Full.
+
+Troubleshooting
+
+Spinner lasts too long
+• Use Quick mode, then try Cancel if the site slow-walks content.
+• Try Full mode for larger articles.
+
+“Unsupported Content-Type”
+• The URL isn’t HTML/XML (e.g., PDF, image). Convert text separately or use other import options.
+
+Outline looks too minimal
+• That’s the text fallback. Try Full mode, or use the Repair tool on the document.
+
+Optional dependencies (improves fetching)
+Always show details
+pip3 install requests chardet
+
+
+requests → better TLS/redirects & streaming
+
+chardet → smarter encoding detection
+
+Related features
+
+🗂️ Batch: Create OPML copies (left-pane multi-select → toolbar button) — non-destructive
+
+⚙️ OPML Preferences (Tools → OPML Preferences):
+• After Convert: Open / Link / Open+Link
+• Batch: optional header link in originals
+
+Why OPML (again)?
+
+OPML is a timeless, lightweight way to think in outlines — a perfect bridge between Doug Engelbart’s vision and today’s web. By harvesting structure from pages, FunKit helps you tame the noisy web into something you can scan, reorganize, and reason about.
+
+Quick start
+
+Install & launch FunKit
+
+Click URL → OPML on the toolbar
+
+Paste a URL (or many), hit OK
+
+Expand the carets and get the gist in seconds ✨
+EOF
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

@@ -1,0 +1,56 @@
+## 1. Why “stable, granular links” matter – the promise in plain language  
+
+Imagine you are writing a research paper, a product design spec, or a personal knowledge‑base.  You spend hours turning a paragraph into a *deep link* that you can hand to a teammate, paste into a chat, or embed in a web page.  In today’s tools that link is fragile: if you later move the paragraph, the link points to the wrong place or breaks entirely.  Our **crisp promise** is therefore:
+
+> **“You can create a link that points to a precise block, line, or even a sentence, and that link will still land on the same logical piece of text after the document is edited.”**
+
+The only new term you need to keep straight is **deep link** – a URL that encodes not just the file name but also a *stable identifier* for a tiny piece of content (block, paragraph, or sentence).  All other jargon (e.g., *transclusion*, *lens*) will be introduced as we go.
+
+---
+
+## 2. Concrete MVP workflows – a step‑by‑step narrative  
+
+### 2.1 Create and share a deep link  
+
+1. **Open a Markdown file** called `Design‑Addressing.md`.  
+2. **Select the third paragraph** (the one that explains “Stability”).  
+3. Press **⌘ L** (or **Ctrl L**) – the app generates a link that looks like  
+
+   ```
+   hs://my‑workspace/Design‑Addressing.md#b=3e2f1a9c‑c0d4‑4a7b‑b8e1‑f5a2e3c9d0b1
+   ```
+
+   The `b=` part is a **block‑GUID** – a 128‑bit hash that is derived from the exact text of the paragraph *and* its surrounding outline, so the identifier is unique and reproducible.  
+
+4. **Copy** the link and **paste** it into a Slack message.  
+
+When a colleague clicks the link, the app opens `Design‑Addressing.md`, scrolls to the paragraph, and highlights it.  If later you move the paragraph to a different position, the same link still resolves because the block‑GUID is still present in the file’s content.
+
+### 2.2 View multiple “lenses” of the same document  
+
+A *lens* is simply a different visual representation of the same underlying data.  In our MVP you can toggle three lenses:
+
+* **Full‑text view** – the raw Markdown with all formatting.  
+* **Outline view** – a collapsible tree that shows headings and the block‑GUIDs underneath.  
+* **Backlink view** – a list of every other document that contains a deep link pointing into the current file.
+
+All three panes are synchronized: clicking a node in the outline automatically scrolls the full‑text view and updates the backlink pane.  This *multi‑view* pattern lets you navigate large knowledge bases without losing context.
+
+### 2.3 Transclude a block (live‑embed)  
+
+Suppose you are writing a “Project‑Roadmap.md” and you want the *Stability* paragraph from `Design‑Addressing.md` to appear there, always up‑to‑date.  
+
+1. In `Project‑Roadmap.md` type `{{hs://my‑workspace/Design‑Addressing.md#b=3e2f1a9c…}}`.  
+2. The editor renders the paragraph inline, but under the hood it stores a **transclusion reference** – a pointer to the source block‑GUID.  
+
+If the source paragraph is edited (e.g., you add a sentence), the transcluded view updates instantly the next time you open the file.  No copy‑and‑paste is required, and you never have to worry about the source moving.
+
+---
+
+## 3. Technical scaffolding – how we keep the binary tiny and fast  
+
+### 3.1 Core language and libraries  
+
+* **Rust** – a systems language that guarantees memory safety without a garbage collector, producing static binaries under 50 MiB.  
+* **Pulldown‑cmark** – a fast Markdown parser that yields a stream of *events* (e.g., “StartParagraph”, “Text”).  
+* **SQLite** (via `rusqlite`) – an embedded relational store for the index of

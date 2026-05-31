@@ -1,0 +1,665 @@
+We are given a Python script that defines a function `parse_links` for a Tkinter Text widget. The function scans the given raw text for markdown-style links (e.g., `[label](doc:123)`) and replaces them with clickable links in the Text widget.
+However, note that the current implementation has a potential issue with variable capture in the closure. Specifically, the loop variable doc_id is used in a closure that is created in a loop. This can lead to all callbacks using the last value of doc_id (a common late-binding closure issue).
+
+The current code attempts to avoid this by using a default argument in the lambda: _did=did. This should work because the default argument is evaluated at the time the lambda is defined.
+
+But note: the variable did is captured from the loop. The function _make_callback is called with doc_id (which is passed as did). Since did is a parameter of _make_callback, and we are setting a default argument in the lambda to _did=did, it should capture the current value of did for each iteration.
+
+However, let me double-check: The function _make_callback is called immediately in the loop for each match, passing the current doc_id as did. Then, inside, we define a lambda that has a default argument _did set to did (which is the current value in the loop). So when the event occurs, it will use the default argument _did which was captured at the time of the lambda's creation.
+
+Therefore, the code should work correctly.
+
+But note: the _make_callback function is defined inside the loop. We can avoid this by using a simpler lambda that captures the current doc_id directly. However, because of the way Python closures work, without the default argument trick we would have a problem.
+
+Alternatively, we can use a more straightforward approach by using functools.partial or by binding the value in a way that doesn't rely on the loop variable.
+
+However, the current code is acceptable.
+
+Another note: the function deletes the tag "link" at the beginning. This means that if you call this function multiple times (on the same text widget) it will remove the previous links. This is intended.
+
+Steps in the function:
+
+Delete the tag "link" to remove any existing link tags.
+Configure the "link" tag again (with green foreground and underline).
+Iterate over each match of the pattern in the raw_text.
+For each match, compute the start and end indices in the Text widget (which already has the raw_text).
+Add the "link" tag to that span.
+Bind a callback to the "link" tag for the Button-1 event. The callback is built by a helper function _make_callback that creates a lambda capturing the current doc_id.
+Potential improvement: Instead of deleting the tag and reconfiguring, we could just reconfigure it once? But deleting the tag also removes all regions tagged, which is what we want because we are going to retag the links. Also, note that tag configurations (like color) persist even after deletion? Actually, deleting the tag removes the configuration. So we have to reconfigure.
+
+Alternatively, we could avoid deleting the tag and instead remove the tag from all regions? But the tag_remove method would require knowing every region. So deleting the tag is simpler.
+
+However, note: deleting the tag and then reconfiguring it again every time we parse links might be acceptable.
+
+Let me write an alternative without the inner function:
+
+We can replace the inner function with: text_widget.tag_bind("link", "", lambda event, did=doc_id: on_open_doc(int(did)), add='+')
+
+But wait: the tag_bind method for a tag replaces the previous binding if we don't set add='+'. However, we are binding the same event to the same tag multiple times. We want multiple links to work independently.
+
+The problem: if we bind the event multiple times to the same tag, then when the event happens, all the callbacks will be called? But actually, Tkinter tag bindings do not work that way. When you bind an event to a tag, it replaces the previous binding for that event and tag. So if we do:
+
+    text_widget.tag_bind("link", "<Button-1>", callback1)
+    text_widget.tag_bind("link", "<Button-1>", callback2)
+Then only callback2 will be called.
+
+Therefore, we cannot use the same tag for multiple links and bind each one to a different callback by using multiple tag_bind calls. The code currently does a tag_bind for each link, but each time it uses the same tag "link". This will overwrite the previous binding.
+
+How does the current code avoid that? It doesn't. It has the same issue: the last binding will be the only one that remains.
+
+Correction: the current code is binding the callback to the "link" tag for each link. But each binding replaces the previous one. So only the last link will work.
+
+This is a bug.
+
+How to fix?
+
+We must have a unique tag for each link? Or we can use a different approach.
+
+Alternatively, we can bind a single event handler to the entire "link" tag, and then in the event handler, figure out which link was clicked.
+
+How? We can use the index method of the Text widget to get the current cursor position, and then check which tagged link that position falls into.
+
+Steps for the alternative approach:
+
+ 1. Create a tag for each link? But that might be messy.
+
+ 2. Or, we can have one tag for all links and then store the associated doc_ids in a dictionary keyed by the start and end indices? But then we have to look up based on the current index.
+Actually, we can do:
+
+    text_widget.tag_bind("link", "<Button-1>", lambda event: handle_link_click(event, text_widget, on_open_doc))
+And then in handle_link_click:
+
+    index = text_widget.index(tk.CURRENT)
+    # Get all tags at the current index
+    tags = text_widget.tag_names(index)
+    if "link" in tags:
+        # But then how do we know which doc_id? We don't have stored per region.
+We would have to store the doc_id information somewhere. We could store it in the tag itself? Actually, Tkinter tags don't have data storage.
+
+Alternatively, we can create a mapping from the index range to the doc_id. But we don't have a way to store arbitrary data on the Text widget.
+
+Another idea: create a unique tag for each link? Then we can bind the same callback to each tag, and the callback can be set once per tag.
+
+Let's restructure:
+
+    tag_name = f"link_{doc_id}_{start_idx}"   # or something unique)
+
+    # Create the tag
+    text_widget.tag_configure(tag_name, ...)
+    text_widget.tag_add(tag_name, start_idx, end_idx)
+
+    def callback(event, did=doc_id):
+        on_open_doc(int(did))
+
+    text_widget.tag_bind(tag_name, "<Button-1>", callback)
+But note: we are creating many tags. We must clean them up? Yes, because we call parse_links multiple times. So we would have to delete all the old tags? We can't easily delete all tags starting with "link_".
+
+Alternatively, we can delete all tags that we created in the previous parse? We would have to remember them.
+
+However, note: the existing code deletes the "link" tag. We can extend that to delete all tags that match a pattern.
+
+But let's reconsider: the existing method of using one tag for appearance and then trying to bind events per region doesn't work because of the overwriting.
+
+Another idea: use the same tag for all links, but then in the event handler, we iterate over the links we know about (from the current parse) and check which one contains the current index.
+
+We would need to store the ranges and the associated doc_ids. We can store that in a list and attach it to the text widget.
+
+How about:
+
+    text_widget._links = []   # each element: (start, end, doc_id)
+
+    for match in ...:
+        ...
+        text_widget._links.append( (start_idx, end_idx, doc_id) )
+
+    Then, bind a single event handler to the tag "link" that:
+
+      - gets the current index (in the event)
+      - searches through the list of links to find the one that contains the index
+      - calls on_open_doc for that doc_id
+But note: the indices in the list are string indices (like "1.0+5c") and we need to compare them with the current index (which is also a string). We can convert the current index to the canonical form? Or use the Text widget's compare method.
+
+Example:
+
+    tags = text_widget.tag_names(index)
+    if "link" in tags:
+        for (start, end, doc_id) in text_widget._links:
+            if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                on_open_doc(int(doc_id))
+                break
+We can do this.
+
+Steps:
+
+    In the beginning of the function:
+        # Store the links info for the current parse
+        if hasattr(text_widget, '_links'):
+            text_widget._links = []   # reset
+        else:
+            text_widget._links = []
+
+        # Also, delete the tag "link" and reconfigure
+        text_widget.tag_delete("link")
+        text_widget.tag_configure("link", foreground="green", underline=True)
+
+    For each match:
+        ... as before ...
+        text_widget._links.append( (start_idx, end_idx, doc_id) )
+        text_widget.tag_add("link", start_idx, end_idx)
+
+    Then, we bind a single event to the "link" tag:
+
+        text_widget.tag_bind("link", "<Button-1>", lambda event: self._on_link_clicked(event, text_widget, on_open_doc))
+
+    We define a helper function (inside parse_links? or outside) but note: we are inside a function. We can define the handler inside.
+
+    Or we can define the handler as a nested function:
+
+        def _on_link_clicked(event):
+            # Get the current index at the click
+            index = text_widget.index(tk.CURRENT)
+            # Check each stored link
+            for (start, end, doc_id) in text_widget._links:
+                if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                    on_open_doc(int(doc_id))
+                    break
+
+        text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+
+    But note: we are binding the same event every time we call parse_links? And we call parse_links multiple times? Then we would have multiple bindings? Actually, no: because we are binding to the tag "link", and we are replacing the binding each time? Actually, yes: the last binding will be the one that remains? Or does Tkinter accumulate handlers? 
+
+    The documentation: 
+        "When a tag is is created, it has no event handlers. The tag_bind method adds an event handler to a tag. Multiple event handlers may be added to a tag. The order of the event handlers is undefined."
+
+    Wait, multiple bindings? But in the code above, we are binding the same event multiple times? Then the same event will fire multiple handlers? 
+
+    Actually, the Tkinter Text widget tag_bind method replaces the previous binding for the same event sequence? Or adds? The standard Tkinter widgets usually replace the binding. But the documentation says: "Multiple event handlers may be added to a tag." So it accumulates.
+
+    Therefore, if we call parse_links multiple times, we will be adding multiple bindings. That would be bad.
+
+    How to fix? We can unbind any old handlers? Or we can do a single binding outside the loop and update the stored links.
+
+    Alternatively, we can do the binding once when the text widget is created? But the parse_links function is called to update the links.
+
+    So we need to unbind the previous binding for the tag "link" and event "<Button-1>"?
+
+    Actually, the tag_bind method without a callback argument returns the current binding? But Tkinter doesn't have an unbind for tags? 
+
+    Alternatively, we can store the binding id and then use tag_unbind? But Tkinter doesn't have that.
+
+    Another idea: we break the binding and do it only once? How? We can check if we have already bound the handler? Then if so, skip binding again.
+
+    We can set a flag on the text widget:
+
+        if not hasattr(text_widget, '_link_handler_bound'):
+            text_widget.bind_class("link", "<Button-1>", _on_link_clicked)
+            text_widget._link_handler_bound = True
+
+    But note: the event handler uses the current `text_widget._links` which is updated each time we parse. So that should be fine.
+
+    However, we are defining the function `_on_link_clicked` inside `parse_links` every time. That would create a new function each time. And we are binding it again? Then we have multiple bindings.
+
+    Instead, we can define the handler once and then just update the `text_widget._links`?
+
+    How about:
+
+        We define the handler outside? But then it wouldn't have access to `text_widget` and `on_open_doc`? Actually, we can design it to use the text_widget.
+
+    Alternatively, we can do:
+
+        Only bind the handler once, and then update the links list.
+
+    Steps:
+
+        We'll create a helper function that does the binding setup once:
+
+        def _bind_link_handler(text_widget, on_open_doc):
+            def _on_link_clicked(event):
+                index = text_widget.index(tk.CURRENT)
+                # If we have stored links, check them
+                if hasattr(text_widget, '_links'):
+                    for (start, end, doc_id) in text_widget._links:
+                        if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                            on_open_doc(int(doc_id))
+                            break
+            # Bind only once
+            if not hasattr(text_widget, '_link_handler_bound'):
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+        Then in parse_links, we call _bind_link_handler(text_widget, on_open_doc) once? But note: `on_open_doc` might change? Then we capture the current one.
+
+    Actually, we can do:
+
+        We attach the current `on_open_doc` to the text_widget? Or we can rely on the closure to capture the current `on_open_doc`? But the handler is fixed at the time of binding.
+
+    Alternatively, we can change the design: have the parse_links function store the current `on_open_doc` in the text_widget? Then the handler doesn't need to capture it.
+
+    But the handler already uses `on_open_doc` from the closure. If we bind the handler once, it will capture the first `on_open_doc` passed. But if we call parse_links again with a different `on_open_doc`, then the handler will still call the old one.
+
+    Therefore, we must update the callback? So we cannot bind once.
+
+    Considering the complexity, I propose the following:
+
+        For now, we stick with the original method of creating a unique tag per link? But then we have to manage the tags.
+
+    Let me try the unique tag approach:
+
+        We'll generate a unique tag name for each link.
+
+        We can delete all tags that start with "link_" at the beginning of parse_links? Then we don't have to remember them.
+
+        Steps:
+
+            # Delete all tags that start with "link_"
+            for tag_name in text_widget.tag_names():
+                if tag_name.startswith("link_"):
+                    text_widget.tag_delete(tag_name)
+
+            # Also, create the common tag for appearance? Actually, we want all links to look the same. So we can have a base tag "link" for appearance and then add the unique tag? But tags can be combined.
+
+            # Alternatively, configure the unique tag to have the same appearance? But that is inefficient.
+
+        Instead, we can keep the base tag "link" for appearance? Then we just add the base tag to the text? And then we add a unique tag for the binding? But then we have two tags: one for style and one for binding? And we can bind the event to the unique tag?
+
+        Example:
+
+            tag_name = "link_bind_" + str(idx)   # but idx might be the same if called multiple times
+
+        Or we can use the doc_id and the index? How about:
+
+            unique_tag = f"link_{doc_id}_{match.start()}"
+
+        Steps:
+
+            # Configure the base tag "link" for appearance (just once, at the beginning of the function)
+            text_widget.tag_configure("link", foreground="green", underline=True)
+
+            for match in ...:
+                ...
+                # Create a unique tag for binding
+                unique_tag = f"link_{doc_id}_{match.start()}"
+                text_widget.tag_add("link", start_idx, end_idx)
+                text_widget.tag_add(unique_tag, start_idx, end_idx)
+
+                # Bind the callback to the unique_tag
+                def callback(event, did=doc_id):
+                    on_open_doc(int(did))
+                text_widget.tag_bind(unique_tag, "<Button-1>", callback)
+
+            But note: we are adding two tags? Then the text has both tags. The binding will work on the unique_tag.
+
+        However, we must delete the unique tags from previous calls? We already do: we delete all tags that start with "link_" at the beginning.
+
+        But then we also delete the appearance tag "link"? We cannot do that because we are deleting by prefix. So we should avoid deleting the base tag.
+
+        Alternatively, we can skip deleting the base tag? We'll delete only tags that start with "link_bind_" or something distinct.
+
+        Actually, we can:
+
+            # Delete all tags that start with "link_bind_" (if we use a prefix "link_bind_")
+            for tag_name in text_widget.tag_names():
+                if tag_name.startswith("link_bind_"):
+                    text_widget.tag_delete(tag_name)
+
+        Then we leave the tag "link" alone.
+
+        But note: we are going to reconfigure the tag "link" every time? We don't need to if we only do it once. Maybe we can do it once externally? Or we can do:
+
+            if not hasattr(text_widget, '_link_tag_configured'):
+                text_widget.tag_configure("link", foreground="green", underline=True)
+                text_widget._link_tag_configured = True
+
+        Then in the beginning of parse_links:
+
+            # Delete all the binding tags
+            for tag_name in text_widget.tag_names():
+                if tag_name.startswith("link_bind_"):
+                    text_widget.tag_delete(tag_name)
+
+        Then for each link:
+
+            unique_tag = f"link_bind_{doc_id}_{match.start()}"
+            text_widget.tag_add("link", start_idx, end_idx)
+            text_widget.tag_add(unique_tag, start_idx, end_idx)
+
+            # Bind the callback to the unique_tag
+            text_widget.tag_bind(unique_tag, "<Button-1>", lambda event, did=doc_id: on_open_doc(int(did)))
+
+        Note: the lambda uses the late-binding issue? We capture doc_id by value via default argument.
+
+        Also, note: we are creating a new tag for each link. This might be inefficient if there are many links? But in a typical document, there aren't that many.
+
+    However, the original code had a bug: the link binding was overwritten. We fix that by using unique tags.
+
+    Alternatively, we can use the single tag with a stored list of links and a single event handler. We can avoid multiple bindings by binding the event only once? But then we must update the stored list of links.
+
+    Let me try that:
+
+        In parse_links:
+
+            # Store the list of links in text_widget._links (as a list of (start, end, doc_id))
+            text_widget._links = []
+
+            # Bind the event handler only once (if not already bound)
+            if not hasattr(text_widget, '_link_handler_bound'):
+                def _on_link_clicked(event):
+                    index = text_widget.index(tk.CURRENT)
+                    if hasattr(text_widget, '_links'):
+                        for (start, end, doc_id) in text_widget._links:
+                            if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                                on_open_doc(int(doc_id))
+                                break
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+            # Now, for each match, we just append to text_widget._links and add the tag "link"
+
+        But note: the closure for _on_link_clicked uses the current `on_open_doc`? And we are binding only once. So if parse_links is called again with a different `on_open_doc`, the handler will still call the old one.
+
+        How to fix? We can attach the `on_open_doc` to the text_widget? Then the handler uses the text_widget._on_open_doc? But parse_links receives `on_open_doc` each time. We would have to update it.
+
+        Alternatively, we can design such that the same `on_open_doc` function is always used? That might be the case.
+
+        Or, we can change the design: have a single function that is set once and for all? Then it's fixed.
+
+        But the problem: the function `parse_links` is called by some other code that might pass a different `on_open_doc` each time? Probably not: likely it's the same function.
+
+        However, to be safe, we can store the current `on_open_doc` in the text_widget? Then update it each time.
+
+        Then:
+
+            text_widget._on_open_doc = on_open_doc
+
+            And in the handler, call text_widget._on_open_doc
+
+        Steps:
+
+            text_widget._links = []   # reset the list of links for this parse
+            text_widget._on_open_doc = on_open_doc   # update the current handler
+
+            # Then bind the event if not bound?
+
+            if not hasattr(text_widget, '_link_handler_bound'):
+                def _on_link_clicked(event):
+                    index = text_widget.index(tk.CURRENT)
+                    if hasattr(text_widget, '_links'):
+                        for (start, end, doc_id) in text_widget._links:
+                            if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                                text_widget._on_open_doc(int(doc_id))
+                                break
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+            Then for each match, append to text_widget._links and add the tag "link".
+
+        This way, we only bind once, and we update the stored links and the current on_open_doc each time we parse.
+
+    Let's go with this approach.
+
+    Summary of the function with this approach:
+
+        import tkinter as tk
+
+        ... same ...
+
+        def parse_links(text_widget: tk.Text, raw_text: str, on_open_doc):
+            # Store the current on_open_doc function and reset the links list
+            text_widget._on_open_doc = on_open_doc
+            text_widget._links = []   # list of tuples (start, end, doc_id)
+
+            # Delete the old tag "link" and reconfigure
+            text_widget.tag_delete("link")
+            text_widget.tag_configure("link", foreground="green", underline=True)
+
+            # Bind the event handler if not already bound
+            if not hasattr(text_widget, '_link_handler_bound'):
+                def _on_link_clicked(event):
+                    index = text_widget.index(tk.CURRENT)
+                    # Check each stored link
+                    for (start, end, doc_id) in text_widget._links:
+                        if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                            # Use the stored on_open_doc function
+                            text_widget._on_open_doc(int(doc_id))
+                            break
+
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+            # Now process the matches
+            for match in LINK_PATTERN.finditer(raw_text):
+                label, doc_id = match.groups()
+                start_idx = f"1.0+{match.start()}c"
+                end_idx = f"1.0+{match.end()}c"
+
+                # Add the tag "link" to this span
+                text_widget.tag_add("link", start_idx, end_idx)
+
+                # Store the link info in text_widget._links
+                text_widget._links.append( (start_idx, end_idx, doc_id) )
+
+    Note: the function `_on_link_clicked` is defined only once and then reused. We update `text_widget._links` and `text_widget._on_open_doc` each time we parse.
+
+    This should work.
+
+    However, note: the stored `text_widget._links` is replaced with a new list each time. And we update `text_widget._on_open_doc` to the latest function.
+
+    Potential issue: if multiple parse_links are in progress? But typically, we parse one by one.
+
+    Also, note: the tag_bind is done only once. We assume that the text widget will persist and be reused.
+
+    Let's test: if we call parse_links multiple times, each time we update the list of links and the on_open_doc function. Then when a link is clicked, it uses the latest on_open_doc and the latest list of links.
+
+    What if the text widget is reused for different content? Then we are storing the new links and the new on_open_doc. That should be fine.
+
+    Also, note: the tag "link" is deleted and re-added each time. That is expected.
+
+    So here is the revised code:
+
+        import re
+        import tkinter as tk
+
+        LINK_PATTERN = re.compile(r"\[([^\]]+)]\(doc:(\d+)\)")
+
+
+        def parse_links(text_widget: tk.Text, raw_text: str, on_open_doc):
+            # Update the stored function and reset the links list
+            text_widget._on_open_doc = on_open_doc
+            text_widget._links = []
+
+            # Reset the Text widget's link tag
+            text_widget.tag_delete("link")
+            text_widget.tag_configure("link", foreground="green", underline=True)
+
+            # Bind the event handler if not bound already
+            if not hasattr(text_widget, '_link_handler_bound'):
+                def _on_link_clicked(event):
+                    index = text_widget.index(tk.CURRENT)
+                    links = getattr(text_widget, '_links', [])
+                    for (start, end, doc_id) in links:
+                        if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                            text_widget._on_open_doc(int(doc_id))
+                            break
+
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+            # Process each match
+            for match in LINK_PATENSION.finditer(raw_text):
+                label, doc_id = match.groups()
+                start_idx = f"1.0+{match.start()}c"
+                end_idx = f"1.0+{match.end()}c"
+
+                text_widget.tag_add("link", start_idx, end_idx)
+                text_widget._links.append( (start_idx, end_idx, doc_id) )
+
+    I changed the _on_link_clicked to get the links list dynamically? But we stored it in text_widget._links. We should use that.
+
+    Actually, we did store it in text_widget._links, so we can use:
+
+        for ... in text_widget._links:
+
+    Also, note: we are appending to text_widget._links and then the event handler uses it. So it's the list from the latest parse_links call.
+
+    We must be cautious: if the text_widget is used in multiple contexts, we are setting attributes on it. We use:
+
+        text_widget._on_open_doc
+        text_widget._links
+        text_widget._link_handler_bound
+
+    This is acceptable.
+
+    Let me write the code accordingly.
+
+    But note: the event handler uses `text_widget._on_open_doc` which is set to the `on_open_doc` passed in the last call. And `text_widget._links` is also set to the last parsed set.
+
+    This should work.
+
+    However, note: what if the text widget is cleared and repopulated? That's what we are doing: we are deleting the tag and then re-adding the tags for the new text.
+
+    Therefore, I think this is a good solution.
+
+    Let me write the corrected function accordingly.
+
+    But wait: the original code also had the tag_bind for each match? Now we removed that and replaced with one tag_bind for the entire tag.
+
+    Also, note: when we add the tag "link", it's added to several spans. The event handler will be called for any click on any of these spans. Then we figure out which span by comparing the index.
+
+    This is efficient enough for a reasonable number of links.
+
+    I'll implement this.
+
+    One more note: the original code had a closure for each doc_id? That was causing the binding to be overwritten. Now we remove that.
+
+    Let's write the code accordingly.
+
+    However, note: the function _on_link_clicked is defined inside parse_links, but only once? Actually, it is defined only if it hasn't been bound. But we are defining it every time we call parse_links until it is bound. But then after the first time, we skip. So it's defined only once.
+
+    That's acceptable.
+
+    Code:
+
+        import re
+        import tkinter as tk
+
+        LINK_PATTERN = re.compile(r"\[([^\]]+)]\(doc:(\d+)\)")
+
+
+        def parse_links(text_widget: tk.Text, raw_text: str, on_open_doc):
+            # Update the current callback and reset the links list
+            text_widget._on_open_doc = on_open_doc
+            text_widget._links = []   # reset the list of links
+
+            # Remove the old link formatting and re-configure
+            text_widget.tag_delete("link")
+            text_widget.tag_configure("link", foreground="green", underline=True)
+
+            # If we haven't bound the event handler yet, do it now
+            if not hasattr(text_widget, '_link_handler_bound'):
+                def _on_link_clicked(event):
+                    # Get the current index at the click
+                    index = text_widget.index(tk.CURRENT)
+                    # Check each link in the current list
+                    for (start, end, doc_id) in text_widget._links:
+                        if text_widget.compare(start, '<=', index) and text_widget.compare(index, '<', end):
+                            text_widget._on_open_doc(int(doc_id))
+                            break
+
+                text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+                text_widget._link_handler_bound = True
+
+            # Process each matched link
+            for match in LINK_PATTERN.finditer(raw_text):
+                label, doc_id = match.groups()
+                start_idx = f"1.0+{match.start()}c"
+                end_idx = f"1.0+{match.end()}c"
+
+                # Apply the link tag to the span
+                text_widget.tag_add("link", start_idx, end_idx)
+
+                # Record the link info (start, end, doc_id) for this match
+                text_widget._links.append( (start_idx, end_idx, doc_id) )
+
+    This should fix the binding issue and also solve the late-binding issue.
+
+    Let me test with two links: 
+        First call to parse_links: 
+            _links = [ (start1, end1, id1), (start2, end2, id2) ]
+            Then when clicking on the first link, it will find the first one and call on_open_doc(id1)
+
+        Second call with new text and new on_open_doc? 
+            Then text_widget._on_open_doc is updated, and _links is reset to the new links.
+
+    We assume the text widget already has the raw_text inserted? The caller is responsible for inserting the text? 
+        The function expects the text widget to contain raw_text? Because it uses the indices in terms of the widget.
+
+    The function does not insert the text? It just parses and sets tags. So the caller must set the text first.
+
+    We'll leave it as is.
+
+    Now, I'll write the code accordingly.
+
+    But note: the pattern in the original code had a typo? 
+        LINK_PATTERN = re.compile(r"\[([^\]]+)]\(doc:(\d+)\)")
+    There's an extra bracket: we have `]+` then `)]` -> that might be a typo. But let's check:
+
+        Original: r"\[([^\]]+)]\(doc:(\d+)\)"
+
+    This matches:
+        [label](doc:123)
+
+    The pattern: 
+        \[      : literal [
+        ([^\]]+) : capture group: any character except ] (one or more)  -> label
+        ]       : literal ]   -> but then we have a closing bracket? 
+        \(      : literal (
+        doc:    : literal string
+        (\d+)   : capture group: digits -> doc_id
+        \)      : literal )
+
+    That pattern is correct? 
+
+    But note: the label part: `([^\]]+)` matches until the next ]? Then we require a closing ]. Then immediately an open parenthesis. 
+
+    So the pattern is: [label](doc:123)
+
+    Yes, that matches.
+
+    Therefore, we keep the pattern.
+
+    Final code.
+The original code had a critical issue where binding each link to the same "link" tag overwrote previous bindings, causing only the last link to work. Here's the corrected implementation:
+Python
+import re
+import tkinter as tk
+
+LINK_PATTERN = re.compile(r"\[([^\]]+)]\(doc:(\d+)\)")
+
+def parse_links(text_widget: tk.Text, raw_text: str, on_open_doc):
+    # Store doc_id handler and reset links list
+    text_widget._on_open_doc = on_open_doc
+    text_widget._links = []
+    
+    # Reset link tag formatting
+    text_widget.tag_delete("link")
+    text_widget.tag_configure("link", foreground="green", underline=True)
+    
+    # Bind click handler if not already bound
+    if not hasattr(text_widget, '_link_handler_bound'):
+        def _on_link_clicked(event):
+            index = text_widget.index(tk.CURRENT)
+            for (start, end, doc_id) in text_widget._links:
+                if (text_widget.compare(start, '<=', index) and
+                    text_widget.compare(index, '<', end)):
+                    text_widget._on_open_doc(int(doc_id))
+                    break
+        
+        text_widget.tag_bind("link", "<Button-1>", _on_link_clicked)
+        text_widget._link_handler_bound = True
+
+    # Process all matches
+    for match in LINK_PATTERN.finditer(raw_text):
+        label, doc_id = match.groups()
+        start_idx = f"1.0+{match.start()}c"
+        end_idx = f"1
+

@@ -1,0 +1,49 @@
+__pycache__/
+*.pyc
+*.pyo
+*.swp
+*.bak
+*.backup
+
+# Virtual environments
+.venv/
+venv/
+*-venv/
+*-env/
+
+# Local databases and sidecars
+*.db
+*.sqlite
+*.sqlite3
+*.db-shm
+*.db-wal
+storage/*.db
+storage/*.db-shm
+storage/*.db-wal
+
+# Build outputs
+build/
+dist/
+*.spec
+buildlog
+log
+*.profclangr
+*.profclangd
+*.profraw
+*.o
+*.a
+*.so
+*.dylib
+*.exe
+config.log
+config.status
+
+# Vendored/interpreter build trees
+PiKit/src/
+FunKit/src/
+
+# Local logs and caches
+*.log
+logs/
+.cache/
+.pytest_cache/

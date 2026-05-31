@@ -1,0 +1,58 @@
+__pycache__/
+# Add rules (idempotent)
+*.pyc
+*.pyo
+*.pyd
+.env
+.env.*
+.venv/
+venv/
+dist/
+build/
+*.log
+.DS_Store
+FunKit-WORKDIR-backup.tgz
+*.tgz
+*.tar
+*.tar.gz
+*.zip
+*.db
+*.sqlite*
+storage/*.db*
+openai.OpenAI.key
+voices/
+*onx
+models/
+*.gguf
+# secrets
+openai.OpenAI.key
+
+# generated exports
+exported_docs/
+
+# secrets & exports
+openai.OpenAI.key
+exported_docs/
+# Backups, temp, logs
+*.bak
+*.bak.*
+*.py.bak*
+*~ 
+.DS_Store
+ai_query.log
+
+# Python cache
+__pycache__/
+.pytest_cache/
+
+# Local user config dir (created at runtime)
+.funkit/
+
+# Env files
+.env
+*.env
+
+# Secrets
+baseten.key
+*.key
+.env

@@ -1,0 +1,20 @@
+urls_text = SD.askstring("URL → OPML", "Enter URL(s) separated by spaces, commas, or newlines:")
+if not urls_text:
+    return
+
+import re
+tokens = re.split(r'[,\s;]+', urls_text.strip())
+urls = []
+for t in tokens:
+    if not t:
+        continue
+    u = t.strip(' <>\"\'()[]')
+    # Add scheme if missing
+    if not re.match(r'^[a-zA-Z][a-zA-Z0-9+.\-]*://', u):
+        u = "https://" + u
+    urls.append(u)
+
+# de-dup while preserving order
+urls = list(dict.fromkeys(urls))
+if not urls:
+    return

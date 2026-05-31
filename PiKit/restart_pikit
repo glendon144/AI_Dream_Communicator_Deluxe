@@ -1,0 +1,100 @@
+#!/usr/bin/env bash
+set -Eeuo pipefail
+
+# --- EDIT THESE IF YOU WANT ---
+MODEL_FILE="${HOME}/localai/models/mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+MODEL_ALIAS="mistral-7b-instruct"   # shows up under /v1/models
+PORT="8081"
+API_KEY="sk-local"
+
+# Optional server tuning (safe defaults)
+CTX_SIZE="${CTX_SIZE:-4096}"
+N_THREADS="${N_THREADS:-$(nproc)}"
+
+# --- Find the llama.cpp server binary ---
+SERVER_BIN="$(command -v server || true)"
+if [[ -z "$SERVER_BIN" ]]; then
+  # common local build path
+  if [[ -x "${HOME}/llama.cpp/server" ]]; then
+    SERVER_BIN="${HOME}/llama.cpp/server"
+  fi
+fi
+if [[ ! -x "${SERVER_BIN:-/nonexistent}" ]]; then
+  echo "❌ Could not find the llama.cpp server binary."
+  echo "   Put 'server' in your PATH, or build it at ~/llama.cpp/server."
+  exit 1
+fi
+
+# --- Sanity checks ---
+if [[ ! -f "$MODEL_FILE" ]]; then
+  echo "❌ Model file not found: $MODEL_FILE"
+  echo "   Update MODEL_FILE at the top of this script."
+  exit 1
+fi
+
+echo "🛑 Stopping any existing llama.cpp server on port ${PORT} (best-effort)..."
+pkill -f "server .*--port ${PORT}" 2>/dev/null || true
+pkill -f "server --port ${PORT}" 2>/dev/null || true
+sleep 0.3
+
+echo "🚀 Starting llama.cpp server…"
+echo "   Binary : $SERVER_BIN"
+echo "   Model  : $MODEL_FILE"
+echo "   Alias  : $MODEL_ALIAS"
+echo "   Port   : $PORT"
+echo "   API key: (set)"
+
+# Start the server in the background
+# Notes:
+#  --alias sets the ID returned by /v1/models
+#  --api-key requires Authorization: Bearer <API_KEY>
+#  --ctx-size and --threads are optional tuning knobs
+"$SERVER_BIN" \
+  --model "$MODEL_FILE" \
+  --alias "$MODEL_ALIAS" \
+  --host 0.0.0.0 \
+  --port "$PORT" \
+  --api-key "$API_KEY" \
+  --ctx-size "$CTX_SIZE" \
+  --threads "$N_THREADS" \
+  >/tmp/llama_server.log 2>&1 &
+
+# Wait for the server to come up
+BASE_URL="http://localhost:${PORT}/v1"
+echo -n "⏳ Waiting for ${BASE_URL}/models …"
+for i in {1..40}; do
+  code=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: Bearer ${API_KEY}" "${BASE_URL}/models" || true)
+  if [[ "$code" == "200" ]]; then
+    echo " up!"
+    break
+  fi
+  echo -n "."
+  sleep 0.25
+done
+if [[ "$code" != "200" ]]; then
+  echo -e "\n❌ llama.cpp server didn't respond OK. Check /tmp/llama_server.log"
+  exit 1
+fi
+
+# Verify that our alias shows up
+if ! curl -s -H "Authorization: Bearer ${API_KEY}" "${BASE_URL}/models" | grep -q "\"id\":\"${MODEL_ALIAS}\""; then
+  echo "⚠️  Model alias '${MODEL_ALIAS}' not visible yet. Proceeding anyway."
+fi
+
+# --- PiKit env ---
+export PIKIT_OPENAI_BASE_URL="${BASE_URL}"
+export PIKIT_OPENAI_API_KEY="${API_KEY}"
+export PIKIT_MODEL_NAME="${MODEL_ALIAS}"
+export PIKIT_MAX_TOKENS_DEFAULT="${PIKIT_MAX_TOKENS_DEFAULT:-256}"
+unset PIKIT_FORCE_NO_AUTH
+
+echo "▶ PiKit will use:"
+echo "   BASE_URL: $PIKIT_OPENAI_BASE_URL"
+echo "   MODEL   : $PIKIT_MODEL_NAME"
+echo "   API KEY : (set)"
+echo "   TOKENS  : $PIKIT_MAX_TOKENS_DEFAULT"
+
+# Launch PiKit
+cd "${HOME}/src/PiKit"
+exec python3 main.py
+

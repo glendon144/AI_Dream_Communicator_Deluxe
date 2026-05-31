@@ -1,0 +1,141 @@
+Traceback (most recent call last):
+  File "/home/gross/src/PiKit/main.py", line 34, in <module>
+    main()
+  File "/home/gross/src/PiKit/main.py", line 27, in main
+    open_memory_dialog(app)
+  File "/home/gross/src/PiKit/modules/memory_dialog.py", line 151, in open_memory_dialog
+    MemoryEditor(app)
+  File "/home/gross/src/PiKit/modules/memory_dialog.py", line 14, in __init__
+    self._load_memory()
+  File "/home/gross/src/PiKit/modules/memory_dialog.py", line 92, in _load_memory
+    conn = self._get_conn()  # Fixed: Call via self
+           ^^^^^^^^^^^^^^^^
+  File "/home/gross/src/PiKit/modules/memory_dialog.py", line 18, in _get_conn
+    db_path = self.app.get_path("memory.db")  # Use self.app
+              ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/tkinter/__init__.py", line 2430, in __getattr__
+    return getattr(self.tk, attr)
+           ^^^^^^^^^^^^^^^^^^^^^^
+AttributeError: '_tkinter.tkapp' object has no attribute 'get_path'
+gross@dl1000:~/src/PiKit$ 
+We are going to modify the script to use the `./storage` directory for all databases. Specifically: - Change `memory.db` to be stored in `./storage/memory.db` - Change `documents.db` to be stored in `./storage/documents.db` (but note the user says it already exists)
+However, note that the script currently uses storage/documents.db (relative path) and memory.db (which is at the root). We are to change memory.db to ./storage/memory.db.
+
+Let's look for the current references to the database files.
+
+Steps:
+
+In the main() function, we have: storage = LocalStorage('./storage/documents.db') memory = LocalMemoryStorage('memory.db')
+
+We want to change the memory storage to use ./storage/memory.db.
+
+Also, note that the main() function sets up the web application and the paths.
+
+Additionally, we should check if there are any other hardcoded references to memory.db.
+
+We are only changing the path for the memory storage.
+
+Let's update the line in main() where LocalMemoryStorage is initialized.
+
+Also, note that the LocalMemoryStorage class is defined in memory_storage.py and it currently takes a filename and uses it as the path.
+
+We are going to change the argument passed to LocalMemoryStorage from 'memory.db' to './storage/memory.db'.
+
+However, note that the LocalMemoryStorage class in memory_storage.py uses: self.conn = sqlite3.connect(db_file)
+
+So we can just change the path we pass.
+
+But wait, the user might run the script from the root of the project. We should use an absolute path or relative path that is consistent.
+
+Alternatively, we can note that the script is run from the root. Therefore, we can use 'storage/memory.db' (without the dot) since the current working directory is the root.
+
+However, the existing documents.db is set as './storage/documents.db' which is equivalent to 'storage/documents.db' if the working directory is the root.
+
+Let's change the memory storage to 'storage/memory.db'.
+
+Alternatively, we can use the same pattern: './storage/memory.db' -> but note that ./storage is relative to the current working directory.
+
+Since the script is run from the root, both ./storage/memory.db and storage/memory.db are the same.
+
+We'll change the line in main.py:
+
+    memory = LocalMemoryStorage('memory.db')   -> becomes:
+    memory = LocalMemoryStorage('./storage/memory.db')
+But note: the user wants to confine all databases to the ./storage directory.
+
+Also, we should check if the LocalMemoryStorage class creates the database file if it doesn't exist? The sqlite3 connect will create the file if it doesn't exist.
+
+However, we must ensure the directory exists. The storage directory already exists because we are using it for documents.db.
+
+But what if the storage directory does not exist? The existing code for documents.db does not create the directory. We are relying on the directory already existing.
+
+We may need to create the storage directory if it doesn't exist? However, the user says that ./storage/documents.db already exists. So we assume the directory exists.
+
+Alternatively, we can modify the code to create the directory if it doesn't exist? But that might be out of scope.
+
+Since the problem only requires changing the path, we'll change the path for the memory storage.
+
+Let's update the main.py file accordingly.
+
+However, note that there might be multiple occurrences of the memory storage being initialized? We are only initializing it in one place.
+
+Let me check the code:
+
+In main.py:
+
+    from memory_storage import LocalMemoryStorage
+    ...
+    memory = LocalMemoryStorage('memory.db')
+Change that to:
+
+    memory = LocalMemoryStorage('./storage/memory.db')
+But wait, we also have a test in test_handlers.py? We are not modifying tests unless they break.
+
+We should check if the tests are using the memory storage? They might be creating a temporary database? Let's see:
+
+In test_handlers.py:
+
+    from memory_storage import LocalMemoryStorage
+
+    @pytest.fixture
+    def client():
+        ...
+        memory = LocalMemoryStorage(':memory:')
+
+    They are using in-memory database for tests (`:memory:`) so we don't need to change that.
+Therefore, the only change is in main.py for the memory storage path.
+
+Let's write the change.
+
+To confine all databases to the `./storage` directory, including the memory database, modify the script as follows:
+Update the Memory Storage Path
+Change the initialization of LocalMemoryStorage in main.py to use ./storage/memory.db:
+
+Python
+# main.py
+def main():
+    # ... existing code ...
+    # Initialize storage and memory
+    storage = LocalStorage('./storage/documents.db')
+    memory = LocalMemoryStorage('./storage/memory.db')  # Modified path
+    # ... rest of the code ...
+Verify Directory Existence (Optional)
+Ensure the storage directory exists before initializing databases. Add this check at the beginning of main():
+
+Python
+import os
+# ... existing imports ...
+
+def main():
+    # Create storage directory if it doesn't exist
+    os.makedirs('./storage', exist_ok=True)
+    
+    # Initialize databases
+    storage = LocalStorage('./storage/documents.db')
+    memory = LocalMemoryStorage('./storage/memory.db')
+    # ... rest of the code ...
+Explanation:
+
+The modification changes the path for memory.db from the root directory to ./storage/memory.db, centralizing all database files (documents.db and memory.db) within the ./storage directory.
+The optional os.makedirs check ensures the storage directory exists, preventing errors if it’s missing. This is safe and won’t overwrite existing directories.
+Note: Test the script after making these changes to confirm databases are created/modified in ./storage.

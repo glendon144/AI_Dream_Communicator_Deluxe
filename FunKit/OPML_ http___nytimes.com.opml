@@ -1,0 +1,160 @@
+<?xml version="1.0" ?>
+<opml xmlns:ns0="http://www.hyperscope.org/hyperscope/opml/public/2006/05/09" xmlns:hs="http://www.hyperscope.org/hyperscope/opml/public/2006/05/09" version="2.0">
+  <head>
+    <title>The New York Times - Breaking News, US News, World News and Videos</title>
+    <ns0:sourceUrl>http://nytimes.com</ns0:sourceUrl>
+    <ns0:createdOn>2025-08-22T23:26:54.003685Z</ns0:createdOn>
+    <ns0:strategy>readability</ns0:strategy>
+  </head>
+  <body>
+    <outline text="&lt;h1 class=&quot;css-1dv1kvn&quot;&gt;New York Times - Top Stories&lt;/h1&gt;" ns0:nid="5afff59d-dec6-5187-b212-735436a546f0" ns0:level="1">
+      <outline text="&lt;p class=&quot;indicate-hover css-1l9mhqb&quot;&gt;Intel Agrees to Sell U.S. a 10% Stake in Its Business&lt;/p&gt;" ns0:nid="8fdd7b31-c3cb-54d5-9e97-ce0e34be4cef" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-dj58nf&quot;&gt;The deal is among the largest government interventions in a U.S. company since the rescue of the auto industry after the 2008 financial crisis.&lt;/p&gt;" ns0:nid="b8aa9976-ef2b-598a-8af5-7e4328b0912d" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="dbbb374a-51ec-54c0-bd7e-167af09af05f" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Nvidia Readies New China Chip as Washington Debates A.I. Exports&lt;/p&gt;" ns0:nid="2e86fce9-42a8-50ea-bea5-090f4d0644c6" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="a7f1d4b4-df27-5c12-8854-f053ed856250" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-le4k3i&quot;&gt;Advertisement&lt;/p&gt;" ns0:nid="7da3f1e7-71d3-5b0a-9c8b-524bee5e2a40" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Pentagon Fires Official Whose Agency Drafted Report Contradicting Trump on Iran&lt;/p&gt;" ns0:nid="8e0218a2-d2bf-506e-a5d7-91b4bb1db05d" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;In June, the Defense Intelligence Agency prepared a preliminary report contradicting President Trump’s contention that Iran nuclear sites were “obliterated.”&lt;/p&gt;" ns0:nid="7df50552-8915-5ce3-95c8-0bf1cf4f6df9" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="716c8cb5-b78a-5947-a9e7-d4c8695467c6" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-ae0yjg&quot;&gt;&lt;span class=&quot;css-19zj3jw&quot;&gt;Analysis&lt;/span&gt;&lt;/p&gt;" ns0:nid="fc910172-074f-569f-8286-0ef3b125dd1a" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Search of Bolton’s Home Shows Uneasy Mix of Retribution and Law Enforcement&lt;/p&gt;" ns0:nid="1200c247-db25-512e-add8-43b77715e8ee" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;President Trump’s efforts to punish rivals immediately stoked questions about the investigation into John Bolton, his former national security adviser.&lt;/p&gt;" ns0:nid="00bbf24c-a246-5622-b956-5e1a889a6bd0" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="e52a901c-757d-590f-9126-5d733af5547b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-ae0yjg&quot;&gt;&lt;span class=&quot;css-12tlih8&quot;&gt;LIVE&lt;/span&gt;&lt;/p&gt;" ns0:nid="d8686e80-241d-5132-addb-bbe7d8bc98db" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;F.B.I. Searches Home and Office of John Bolton, a Trump Critic&lt;/p&gt;" ns0:nid="950fb41a-011c-5859-a73e-778a3e4b377f" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-16lw6zo&quot;&gt; &lt;/p&gt;" ns0:nid="9fb826d1-28d1-5651-9401-9e59e146c562" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Hegseth Authorizes Troops in D.C. to Carry Weapons&lt;/p&gt;" ns0:nid="cac0d07b-b5e1-5722-9ca2-f0e42d1746ae" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;2 min read&lt;/p&gt;" ns0:nid="23da1c04-aba0-5321-ab29-e422648b2548" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Justice Dept. Releases Blanche Interview With Ghislaine Maxwell&lt;/p&gt;" ns0:nid="f78134ce-3ce2-5d1b-8435-cac5c391aa13" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Ms. Maxwell, the Jeffrey Epstein confidante, told Deputy Attorney General Todd Blanche that she never saw President Trump in an “inappropriate setting.”&lt;/p&gt;" ns0:nid="f21e7941-deab-5835-a1c1-546e6ad9e5a6" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;2 min read&lt;/p&gt;" ns0:nid="4c68cebf-f9d1-5dd2-83da-d4f20dfa4a41" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Read the Interview&lt;/p&gt;" ns0:nid="67aa710f-ccce-5250-9415-276441a33aa7" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Justice Dept. Gives Congress Some Subpoenaed Epstein Files&lt;/p&gt;" ns0:nid="a376e96c-2df1-5931-9004-93d8bc2d833c" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="3f7b3fa7-94e9-5822-bcd5-2662e61dd02c" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Powell Sends Strongest Signal Yet That Interest Rate Cuts Are Coming&lt;/p&gt;" ns0:nid="f1794053-dc95-5ab8-9181-66de5066fde2" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Jerome Powell said the “balance of risks” across the economy had started to shift, raising the odds the Federal Reserve lowers borrowing costs in September.&lt;/p&gt;" ns0:nid="b600eea7-a06d-5324-b79a-c608dad9334b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;6 min read&lt;/p&gt;" ns0:nid="d78c0e2b-efb0-5ed6-848f-06731bfb95dd" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;What to Know About the Allegations Against Lisa Cook of the Fed&lt;/p&gt;" ns0:nid="cd72cb2d-988f-552b-b84c-e672324192a1" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;6 min read&lt;/p&gt;" ns0:nid="10877856-7565-576c-b3a5-11ff034c5bb9" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-le4k3i&quot;&gt;Advertisement&lt;/p&gt;" ns0:nid="f8e9255f-dffc-5bb1-8672-d53df23ed0ef" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-ae0yjg&quot;&gt;&lt;span class=&quot;indicate-hover css-19zj3jw&quot;&gt;The Great Read&lt;/span&gt;&lt;/p&gt;" ns0:nid="1b99bc2c-6b38-59dc-a6ce-fcf88aaa7166" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-1l17hq0&quot;&gt;Can a Gen Z Amy Winehouse Get Big Without Breaking? Lola Young Is Trying.&lt;/p&gt;" ns0:nid="d033adee-0465-59e0-b9be-2fd55077f310" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q indicate-hover&quot;&gt;The pop-soul singer is self-loathing, self-aggrandizing, irreverent, evasive and in-your-face. At 24, she’s finally arrived. But the ride is just beginning.&lt;/p&gt;" ns0:nid="6fd553d6-f2d4-5b29-906d-a023ea44e5e4" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;g-demo-sentence&quot;&gt; &lt;a href=&quot;https://www.nytimes.com/tips&quot;&gt;&lt;b&gt;Got a Tip?&lt;/b&gt; The Times offers several ways to send important information confidentially ›&lt;/a&gt;&lt;/p&gt;" ns0:nid="15e7d663-14f6-5cbf-b325-79d10cf9a3b0" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Multiple Passengers Are Killed After Bus Crashes in Western New York&lt;/p&gt;" ns0:nid="d772a317-de32-5821-a7e4-b7a80cf29b6a" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;At least one child was among those killed when a tour bus crashed about 30 miles east of Buffalo, officials said.&lt;/p&gt;" ns0:nid="61e29c65-5fb7-533b-89cf-84ce24337e80" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="408a6d8f-3ade-5c4e-9552-7259f8a2e9de" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-le4k3i&quot;&gt;Advertisement&lt;/p&gt;" ns0:nid="091386d6-0dbc-58df-ace9-f0c9a9aff923" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Abrego Garcia, Free From Tennessee Jail, Is Returning to Maryland, Lawyer Says&lt;/p&gt;" ns0:nid="0f488c78-19e6-50c5-996f-33355802bd26" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;The Justice Department has said that if Kilmar Armando Abrego Garcia was released, it would most likely seek to re-deport him.&lt;/p&gt;" ns0:nid="16058626-53ff-5fad-96c9-2ba02c5c5d96" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;2 min read&lt;/p&gt;" ns0:nid="bf91cc4e-9d5d-55e8-84d4-9dcaceeb8cf7" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Florida Governor Says He Is Undeterred by Court Ruling on ‘Alligator Alcatraz’&lt;/p&gt;" ns0:nid="e514d3fe-f817-5aa2-9e82-bc44909db2fe" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="12fe15a8-d187-5290-83f4-06f619fbf039" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;With Close Associates Under Fire, Mayor Adams Remains Defiant&lt;/p&gt;" ns0:nid="e9f59c6b-61cb-54fc-9765-1d93a2d7bd9d" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Mayor Eric Adams of New York defended his administration and his re-election bid on Friday amid corruption charges against some of his closest allies.&lt;/p&gt;" ns0:nid="474fd87f-2ca0-5d7e-bcec-9ff316a977c8" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="a54162c2-0af5-51ff-a721-aba68eaf95c4" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;New York Is a Big City. Its Graft Has Become Small-Town Stuff.&lt;/p&gt;" ns0:nid="3b4762ca-f7d0-5b81-96b1-3f3d1c7b551d" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;The city’s corruption once had ambition to match its soaring skyscrapers. Indictments this week described cut-rate schemes with far lower returns.&lt;/p&gt;" ns0:nid="75c9c05e-71fe-57e1-b2c4-a1f155dcd16b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="ec381301-286a-587c-b3ca-e5b9fc76a9f8" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;The White House Wants Indiana to Redistrict. Republicans There Are Split.&lt;/p&gt;" ns0:nid="930cc61b-e3ab-52cf-82a9-b77bdd149337" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;As President Trump asks Republican-led states to redraw congressional maps, some Indiana conservatives are pushing back.&lt;/p&gt;" ns0:nid="7b49fd7f-1860-5feb-ac44-4aadc83a85a6" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;6 min read&lt;/p&gt;" ns0:nid="e1f1b36e-4d3e-5964-a35e-3f05283a9b0f" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;How Redistricting Wars Could Give the G.O.P. Up to 7 Seats&lt;/p&gt;" ns0:nid="03efa494-35b7-5372-b3b8-439ce51bcf90" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="b3b79e9d-9aa2-5dd6-808c-6af2afacae8b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-le4k3i&quot;&gt;Advertisement&lt;/p&gt;" ns0:nid="aff447ca-f5de-5fa2-8ea2-2c50a319a82e" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-1sf4sro standardBold black&quot;&gt;Ideas&lt;/p&gt;" ns0:nid="968ba6c2-2fb4-5551-92c2-e3b850cb4e5e" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;positionBottom css-15hyzvs&quot; data-tpl=&quot;h&quot;&gt;&lt;span class=&quot;css-qobiag standardBold black&quot;&gt;Revenge of the Followers&lt;/span&gt;&lt;span class=&quot;css-6lipni standardBold black positionBottom&quot;&gt;An emerging genre of video collapses the boundaries between celebrities and their audiences.&lt;/span&gt;&lt;/p&gt;" ns0:nid="81d31d3b-90cb-5fef-8c3e-4b2f7a169a6b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-mnb455&quot;&gt;Illustration by Erik Carter&lt;/p&gt;" ns0:nid="cd7891e9-6af2-575b-ba0c-0be552f378ea" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Trump Officials Demand Apology From George Mason President Over Diversity&lt;/p&gt;" ns0:nid="299fc3bd-31f3-59f0-8d5b-fa5711cf3b37" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;The Education Department said an investigation had found the university and its president had supported diversity programs it views as discriminatory.&lt;/p&gt;" ns0:nid="3e47cb28-b9c4-573a-ad71-8f66e28c2961" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="6599d595-6451-5553-8f0b-2d3d5a1eb530" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Education Department Backs Away From Program for Hispanic-Serving Colleges&lt;/p&gt;" ns0:nid="61bd79e1-834b-5ecd-b36f-a06b157aa330" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Trump officials said that they would not contest a lawsuit challenging the constitutionality of the federal program, which could effectively end it.&lt;/p&gt;" ns0:nid="ff79a731-56c6-5417-8111-8fe8e866b055" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;3 min read&lt;/p&gt;" ns0:nid="32fde03c-5b30-50c5-bfc2-d7227884207b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Howard University President to Step Down This Month&lt;/p&gt;" ns0:nid="5d54493d-6e8e-5b50-9d94-5013346c408c" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;2 min read&lt;/p&gt;" ns0:nid="db1bfa3e-66c2-5bc7-8685-51d80656f680" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Is the Trump Administration Building Up to a Military Confrontation With Venezuela?&lt;/p&gt;" ns0:nid="e70e7305-cbe7-5e25-9fb0-a3d7006bb4ad" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;A major increase in U.S. naval forces in the south Caribbean Sea has been underway since President Trump signed a directive targeting some cartels.&lt;/p&gt;" ns0:nid="3d58cbd4-b465-5a29-a74f-1a8a58ee3fc9" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;7 min read&lt;/p&gt;" ns0:nid="c805c434-a91a-5390-a88b-1efa0d098ff9" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Warships From the U.S. Move Close, but Many Venezuelans Shrug&lt;/p&gt;" ns0:nid="4b9fc411-c500-5cbd-bb46-5521c30f340e" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Past experience has left some people skeptical that political change in Venezuela will come from the outside.&lt;/p&gt;" ns0:nid="ef6b3c2d-9241-53b3-8be2-b0ee1de795ed" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="93f94982-2f85-5cf1-899e-70daa726a1d9" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-le4k3i&quot;&gt;Advertisement&lt;/p&gt;" ns0:nid="048d52ac-372f-5609-a2da-46bdc2bc8904" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-1tzg32r&quot;&gt;Amtrak’s Mardi Gras Train Returns, Joyfully, 20 Years After Katrina&lt;/p&gt;" ns0:nid="54364194-5665-5d65-ae88-e9953fe00242" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Driving may be faster, but the inaugural train trips between Mobile, Ala., and New Orleans this week drew travelers eager for a different kind of adventure.&lt;/p&gt;" ns0:nid="3ed82e64-1100-55b5-a862-4cc54d80551c" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="03edb721-4074-50ee-84e6-0a8e4ec8eb53" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Move Over, Mouse Ears: For Disney Adults, There’s a New Obsession&lt;/p&gt;" ns0:nid="69212f5e-4ab4-5651-92a1-c017a18ec88b" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Tiny stuffed animals that use magnets to stay perched on your shoulder have become a must-have accessory for some theme park superfans.&lt;/p&gt;" ns0:nid="9ca5f6d9-fafc-5422-8bad-ae1e9ad70bec" ns0:level="1"/>
+      <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="3b84ff00-7ad3-5bd1-bd61-d7dc366c8a65" ns0:level="1"/>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-v7w2uh&quot;&gt;&lt;span&gt;What to Watch and Read&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="2e6aadc9-dfd1-5d23-8550-b4d92d66cffb" ns0:level="2"/>
+      <outline text="&lt;h2 class=&quot;g-screenreader&quot; data-svelte-h=&quot;svelte-yjtbeg&quot;&gt;Weather&lt;/h2&gt;" ns0:nid="e47a9855-9a28-5592-bad0-24e092b7b713" ns0:level="2">
+        <outline text="&lt;p class=&quot;indicate-hover css-59y92d&quot;&gt;&lt;/p&gt;" ns0:nid="0591eae2-c081-5f78-817d-d67429f63316" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-hr63kf&quot;&gt;The Editorial Board&lt;/p&gt;" ns0:nid="23ac9afb-f455-59a2-96cd-9cfdda1b6eb3" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-uzitgk&quot;&gt;Trump Gets His Revenge on John Bolton. Who’s Next?&lt;/p&gt;" ns0:nid="902c450e-4eee-5b0a-b0ca-0984a0e1d2aa" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="8f8a9ba8-ae4f-55e2-a5f7-44228608b6ed" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-hr63kf&quot;&gt;James Kirchick&lt;/p&gt;" ns0:nid="9f8ac551-f279-5748-8a0b-d3eb5019a93b" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-uzitgk&quot;&gt;Why Epstein’s Furious Grip on Washington Holds&lt;/p&gt;" ns0:nid="7183f0ec-90e1-559d-9ada-338b2863edff" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="aff27a4e-9a2f-592d-9bfc-0111e420eb92" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-hr63kf&quot;&gt;Carlos Lozada&lt;/p&gt;" ns0:nid="dd7994dc-9cbb-55bc-8220-1d2a4821fe30" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-uzitgk&quot;&gt;How I Built My Ruthless Summer Reading List&lt;/p&gt;" ns0:nid="82aeeaf2-377a-55be-ab96-bab1e4494537" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;7 min read&lt;/p&gt;" ns0:nid="d2f480f4-b0e8-5730-a860-0f1b59a92e32" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-hr63kf&quot;&gt;David Brooks&lt;/p&gt;" ns0:nid="f96c60e4-be43-505d-ab2f-5cea9bf9544c" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-uzitgk&quot;&gt;The Rise of Right-Wing Nihilism&lt;/p&gt;" ns0:nid="2936b67e-f684-550b-a168-d1c90790c341" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;6 min read&lt;/p&gt;" ns0:nid="84508fc4-fd4d-5d14-b8b0-003a036353a7" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-ae0yjg&quot;&gt;&lt;span class=&quot;css-19zj3jw&quot;&gt;The Evening&lt;/span&gt;&lt;/p&gt;" ns0:nid="ed48025a-be04-5c4f-8738-bbde38543cbf" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;F.B.I. Searched Home of John Bolton, a Former Trump Adviser&lt;/p&gt;" ns0:nid="89fd5e08-45c2-5108-a551-c14ed4d610d5" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Also, the Federal Reserve chair signaled that interest rates could soon come down. Here’s the latest.&lt;/p&gt;" ns0:nid="9b662472-bb34-5d34-b02d-6ed5f9c17600" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="69b0d50b-1f98-5138-a871-40b5e3c16899" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-v7w2uh&quot;&gt;&lt;span&gt;In Case You Missed It&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="42766efc-fd47-582a-9677-69f6f4e48765" ns0:level="2"/>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-1qa12lp&quot;&gt;&lt;span&gt;More News&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="d673bbb5-5d7c-579c-8ed8-a6ab902102cc" ns0:level="2">
+        <outline text="&lt;p class=&quot;indicate-hover css-l8djeo&quot;&gt;Musk’s X Agrees to Settlements With Thousands of Former Employees&lt;/p&gt;" ns0:nid="ed4297b8-7a63-557c-bec4-b2e6c20f1321" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;The settlements are an about-face for Elon Musk, whose company fought with former workers over whether it owed them severance pay.&lt;/p&gt;" ns0:nid="49125148-3e00-50d4-80d2-c2adaa71531f" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;1 min read&lt;/p&gt;" ns0:nid="6a9cf112-9c20-5d31-8e16-4676646d7c2f" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Ron Turcotte, Who Rode Secretariat to the Triple Crown, Dies at 84&lt;/p&gt;" ns0:nid="224475d2-e7da-5493-a1d8-8af01cb46581" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;With Turcotte in the saddle, Secretariat won the Kentucky Derby and the Preakness in 1973 and then demolished the competition in the Belmont Stakes.&lt;/p&gt;" ns0:nid="70e9a075-cc26-5bd6-a0fe-58fc149427a6" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="b7f0f520-9fda-586f-ba11-0e15c577b549" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;4 Takeaways After Erik Menendez Was Denied Parole&lt;/p&gt;" ns0:nid="2d714230-e088-5af1-b666-54f8e1e38373" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;The results of Erik’s hearing suggest that his brother, Lyle, faces hurdles in his bid today for release, after they murdered their parents in 1989.&lt;/p&gt;" ns0:nid="288977f5-4b04-5e2d-a97c-931d8631bc2a" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;4 min read&lt;/p&gt;" ns0:nid="397c6a82-a4a3-5a45-aa3a-95332a7e8539" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Covid Vaccine Opponent Is Tapped to Lead Federal Review Team&lt;/p&gt;" ns0:nid="649f2d06-f240-51af-bf5c-63f9ab08254d" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Panel members have been given a broad mandate, despite pleas from C.D.C. employees asking Robert F. Kennedy Jr. to stop spreading misinformation.&lt;/p&gt;" ns0:nid="8ffa897e-b974-570d-9289-6f5f62229b26" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;css-e6rebf&quot; data-ttr=&quot;1&quot;&gt;5 min read&lt;/p&gt;" ns0:nid="fb2c5cbf-db5b-51a2-9715-6c2d48d2c7eb" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-1qa12lp&quot;&gt;&lt;span&gt;Well&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="ee078225-b357-503a-aa09-18939e8f6ca7" ns0:level="2"/>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-1qa12lp&quot;&gt;&lt;span&gt;Culture and Lifestyle&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="3bc8b81a-d670-5bbb-b43d-7cf40f14aab6" ns0:level="2">
+        <outline text="&lt;p class=&quot;indicate-hover css-59y92d&quot;&gt;&lt;/p&gt;" ns0:nid="b21789de-97d0-55c8-bae3-9626eaffadf5" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;a class=&quot;css-9mylee&quot; href=&quot;https://www.nytimes.com/athletic/&quot; data-uri=&quot;&quot; aria-hidden=&quot;false&quot;&gt;&lt;div class=&quot;css-1rwxdtx&quot;&gt;&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;The Athletic&lt;/span&gt;&lt;/p&gt;&lt;span class=&quot;css-wne7fp&quot;&gt;Sports coverage&lt;/span&gt;&lt;/div&gt;&lt;/a&gt;&lt;/h2&gt;" ns0:nid="2bf6ac51-e4d0-5386-80b2-26cf87c8505f" ns0:level="2">
+        <outline text="&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;The Athletic&lt;/span&gt;&lt;/p&gt;" ns0:nid="181773f2-fa88-5236-ab9b-3fa227593dda" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Play Connections: Sports Edition&lt;/p&gt;" ns0:nid="d125656c-7cc3-5f57-94d7-7ffcbb3493bd" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-1lel406&quot;&gt;&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Audio&lt;/span&gt;&lt;/p&gt;&lt;span class=&quot;css-wne7fp&quot;&gt;Podcasts and narrated articles&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="13ad1027-8ba8-5154-8fbb-7569d6e4ab29" ns0:level="2">
+        <outline text="&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Audio&lt;/span&gt;&lt;/p&gt;" ns0:nid="9dd158f4-07e2-5daf-9247-b75ae5e9813e" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;a class=&quot;css-9mylee&quot; href=&quot;https://cooking.nytimes.com/&quot; data-uri=&quot;&quot; aria-hidden=&quot;false&quot;&gt;&lt;div class=&quot;css-1rwxdtx&quot;&gt;&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Cooking&lt;/span&gt;&lt;/p&gt;&lt;span class=&quot;css-wne7fp&quot;&gt;Recipes and guides&lt;/span&gt;&lt;/div&gt;&lt;/a&gt;&lt;/h2&gt;" ns0:nid="84362a34-b619-593c-b5ac-98fb9fc797f8" ns0:level="2">
+        <outline text="&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Cooking&lt;/span&gt;&lt;/p&gt;" ns0:nid="a3d16818-39fb-5398-8a8d-1a2ff319986b" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-v7w2uh&quot;&gt;&lt;span&gt;Most Popular This Week&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="3266852e-c497-5e63-a29d-9d1b5711a137" ns0:level="2"/>
+      <outline text="&lt;h2&gt;&lt;a class=&quot;css-9mylee&quot; href=&quot;https://www.nytimes.com/wirecutter/&quot; data-uri=&quot;&quot; aria-hidden=&quot;false&quot;&gt;&lt;div class=&quot;css-1rwxdtx&quot;&gt;&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Wirecutter&lt;/span&gt;&lt;/p&gt;&lt;span class=&quot;css-wne7fp&quot;&gt;Product recommendations&lt;/span&gt;&lt;/div&gt;&lt;/a&gt;&lt;/h2&gt;" ns0:nid="565d49b9-afa2-5c8a-9324-4a066bab8391" ns0:level="2">
+        <outline text="&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Wirecutter&lt;/span&gt;&lt;/p&gt;" ns0:nid="38d99a2a-af6b-5d89-b26d-3957d4b59ae5" ns0:level="2"/>
+      </outline>
+      <outline text="&lt;h2&gt;&lt;div class=&quot;css-1lel406&quot;&gt;&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Games&lt;/span&gt;&lt;/p&gt;&lt;span class=&quot;css-wne7fp&quot;&gt;Daily puzzles&lt;/span&gt;&lt;/div&gt;&lt;/h2&gt;" ns0:nid="4678960e-729d-50d6-baf0-eb22df093c54" ns0:level="2">
+        <outline text="&lt;p class=&quot;css-y8eamz&quot; data-tpl=&quot;tk&quot;&gt;&lt;span&gt;Games&lt;/span&gt;&lt;/p&gt;" ns0:nid="271ba565-106d-5faa-be28-7bc00d610c00" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Wordle&lt;/p&gt;" ns0:nid="8331c4f7-591e-5549-8d42-e13d4141b152" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Guess the 5-letter word with 6 chances.&lt;/p&gt;" ns0:nid="d87b683b-958d-5fad-af56-f1c4e59a9ddb" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Connections&lt;/p&gt;" ns0:nid="c7cb3b1b-b116-5030-8b36-daf3f2e0438e" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Group words that share a common thread.&lt;/p&gt;" ns0:nid="09328269-ffae-5e30-a77d-d69d2b79573a" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Strands&lt;/p&gt;" ns0:nid="224169ac-e89f-533c-871a-e902c4e563e9" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Uncover hidden words and reveal the theme.&lt;/p&gt;" ns0:nid="d84b02dc-7ce6-5e21-81f1-78a4a0a64be6" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;Spelling Bee&lt;/p&gt;" ns0:nid="04fef7cb-b689-55eb-8d26-c11aef8956df" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;How many words can you make with 7 letters?&lt;/p&gt;" ns0:nid="f6f3b219-9fb8-59ff-837f-63e24a10e7cc" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;The Crossword&lt;/p&gt;" ns0:nid="c99b90ea-353b-5a68-a72b-e8d5aad6a78b" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Get clued in with wordplay, every day.&lt;/p&gt;" ns0:nid="4367ef59-f07c-5100-9ad6-cd7cede94349" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;indicate-hover css-91bpc3&quot;&gt;The Mini Crossword&lt;/p&gt;" ns0:nid="14a24592-11bf-56a0-878c-fb8fc4c9e7f2" ns0:level="2"/>
+        <outline text="&lt;p class=&quot;summary-class css-r2tq9q&quot;&gt;Solve this bite-sized puzzle in just a few minutes.&lt;/p&gt;" ns0:nid="9d81c888-f63b-5e3d-8e78-5919f0616c23" ns0:level="2"/>
+      </outline>
+    </outline>
+  </body>
+</opml>

@@ -1,0 +1,21 @@
+# FunKit requirements.txt
+# Note: Piper voice features need external non-pip assets too:
+# - a Piper executable (PATH, PIPER_BIN, or PIPER_CMD)
+# - a voice model such as voices/en_US-amy-low.onnx (or PIPER_MODEL)
+
+# Install numpy first so its C-headers are available for pandas
+numpy>=1.24.0
+
+# Use a version of pandas that ships a pre-built wheel for Python 3.10 on Linux
+pandas>=2.0.3
+
+# Other dependencies
+pyserial>=3.5
+pillow>=9.0.0
+flask>=3.1.1
+requests>=2.31.0
+# OpenAI client library for API access
+openai>=1.0.0
+
+# Note: tkinter is part of the Python stdlib on Linux;
+# install via apt: sudo apt install python3-tk
