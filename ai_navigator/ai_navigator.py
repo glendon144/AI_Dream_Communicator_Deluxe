@@ -54,6 +54,8 @@ from PySide6.QtGui import (
     QGuiApplication,
     QDesktopServices,
     QClipboard,
+    QKeySequence,
+    QShortcut,
 )
 from PySide6.QtWidgets import (
     QApplication,
@@ -788,6 +790,8 @@ class BrowserPane(QWidget):
     New: on_memory_log callback for Memory Pane.
     """
 
+    browserFocusRequested = Signal()
+
     def __init__(self, on_page_loaded=None, on_archive_request=None, on_memory_log=None):
         super().__init__()
 
@@ -806,6 +810,7 @@ class BrowserPane(QWidget):
         self.home_button = QPushButton("Home")
         self.archive_button = QPushButton("Archive")
         self.opml_button = QPushButton("Outline (OPML export)")
+        self.browser_focus_button = QPushButton("Browser Full")
         self.throbber = ThrobberWidget(size=24)
 
         # --- VPN UI ---
@@ -848,6 +853,7 @@ class BrowserPane(QWidget):
             self.go_button,
             self.archive_button,
             self.opml_button,
+            self.browser_focus_button,
             self.vpn_button,
         ):
             b.setStyleSheet(btn_style)
@@ -873,6 +879,7 @@ class BrowserPane(QWidget):
         toolbar_row.addWidget(self.go_button)
         toolbar_row.addWidget(self.archive_button)
         toolbar_row.addWidget(self.opml_button)
+        toolbar_row.addWidget(self.browser_focus_button)
         toolbar_row.addWidget(self.vpn_button)
         toolbar_row.addWidget(self.vpn_status)
         toolbar_row.addWidget(self.throbber)
@@ -901,6 +908,7 @@ class BrowserPane(QWidget):
         self.home_button.clicked.connect(self.load_home)
         self.archive_button.clicked.connect(self._archive_current_page)
         self.opml_button.clicked.connect(self._export_outline_opml)
+        self.browser_focus_button.clicked.connect(self.browserFocusRequested.emit)
 
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self._on_load_progress)
@@ -913,6 +921,9 @@ class BrowserPane(QWidget):
 
         self.url_bar.setText(self.home_url)
         self.load_url()
+
+    def set_browser_focus_active(self, active: bool):
+        self.browser_focus_button.setText("Restore Panes" if active else "Browser Full")
 
     # VPN helpers
     def _toggle_vpn(self, checked: bool):
@@ -2526,26 +2537,70 @@ class MainWindow(QWidget):
         )
         self.gmail_pane = GmailPane(browser_pane=self.browser_pane)
         self.webmcp_pane = WebMCPActionsPane(self.browser_pane)
+        self._browser_focus_active = False
+        self._saved_outer_splitter_sizes = None
+        self._saved_mid_splitter_sizes = None
 
         self.results_pane.recoveredPage.connect(self._handle_recovered_page)
         self.memory_pane.openUrlRequested.connect(self.browser_pane.load_from_memory)
+        self.browser_pane.browserFocusRequested.connect(self._toggle_browser_focus)
 
-        mid_splitter = QSplitter(Qt.Horizontal)
-        mid_splitter.addWidget(self.results_pane)
-        mid_splitter.addWidget(self.memory_pane)
-        mid_splitter.addWidget(self.gmail_pane)
-        mid_splitter.addWidget(self.webmcp_pane)
-        mid_splitter.setSizes([300, 320, 360, 420])
+        self.mid_splitter = QSplitter(Qt.Horizontal)
+        self.mid_splitter.addWidget(self.results_pane)
+        self.mid_splitter.addWidget(self.memory_pane)
+        self.mid_splitter.addWidget(self.gmail_pane)
+        self.mid_splitter.addWidget(self.webmcp_pane)
+        self.mid_splitter.setSizes([300, 320, 360, 420])
+        for index in range(self.mid_splitter.count()):
+            self.mid_splitter.setCollapsible(index, True)
 
-        outer_splitter = QSplitter(Qt.Horizontal)
-        outer_splitter.addWidget(self.browser_pane)
-        outer_splitter.addWidget(mid_splitter)
-        outer_splitter.setSizes([900, 700])
+        self.outer_splitter = QSplitter(Qt.Horizontal)
+        self.outer_splitter.addWidget(self.browser_pane)
+        self.outer_splitter.addWidget(self.mid_splitter)
+        self.outer_splitter.setSizes([900, 700])
+        for index in range(self.outer_splitter.count()):
+            self.outer_splitter.setCollapsible(index, True)
+
+        self.browser_focus_shortcut = QShortcut(QKeySequence("Ctrl+Shift+B"), self)
+        self.browser_focus_shortcut.activated.connect(self._toggle_browser_focus)
 
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(0, 0, 0, 0)
-        main_layout.addWidget(outer_splitter)
+        main_layout.addWidget(self.outer_splitter)
         self.setLayout(main_layout)
+
+    def _toggle_browser_focus(self):
+        if self._browser_focus_active:
+            self._restore_browser_focus()
+        else:
+            self._expand_browser_focus()
+
+    def _expand_browser_focus(self):
+        if self._browser_focus_active:
+            return
+
+        self._saved_outer_splitter_sizes = self.outer_splitter.sizes()
+        self._saved_mid_splitter_sizes = self.mid_splitter.sizes()
+        browser_width = max(self.outer_splitter.width(), sum(self._saved_outer_splitter_sizes), 1)
+
+        self.mid_splitter.setSizes([0] * self.mid_splitter.count())
+        self.outer_splitter.setSizes([browser_width, 0])
+        self._browser_focus_active = True
+        self.browser_pane.set_browser_focus_active(True)
+
+    def _restore_browser_focus(self):
+        if not self._browser_focus_active:
+            return
+
+        if self._saved_mid_splitter_sizes:
+            self.mid_splitter.setSizes(self._saved_mid_splitter_sizes)
+        if self._saved_outer_splitter_sizes:
+            self.outer_splitter.setSizes(self._saved_outer_splitter_sizes)
+
+        self._browser_focus_active = False
+        self._saved_outer_splitter_sizes = None
+        self._saved_mid_splitter_sizes = None
+        self.browser_pane.set_browser_focus_active(False)
 
     def _handle_page_loaded(self, url_str: str):
         # Hook point for future auto-archive/diff logic.
