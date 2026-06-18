@@ -26,6 +26,7 @@ import importlib.util
 import webbrowser
 import subprocess
 import sqlite3
+import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
@@ -94,6 +95,7 @@ DEFAULT_OPML_PATH = "archive_export.opml"
 MEMORY_DB_PATH = Path("memory.db")
 
 K_WEAVE = 3  # Recover Memory Weave count
+QT_WEBENGINE_SETHTML_LIMIT_BYTES = 2 * 1024 * 1024
 WEBMCP_RELAY_ROOT = Path(os.getenv("WEBMCP_RELAY_ROOT", str(Path(__file__).resolve().parent.parent / "webmcp_relay"))).expanduser()
 WEBMCP_RELAY_SERVER = str(Path(os.getenv("WEBMCP_RELAY_SERVER", str(WEBMCP_RELAY_ROOT / "server.py"))).expanduser())
 WEBMCP_CLIENT_MODULE = str(Path(os.getenv("WEBMCP_CLIENT_MODULE", str(WEBMCP_RELAY_ROOT / "webmcp_relay_client" / "webmcp_client.py"))).expanduser())
@@ -952,8 +954,35 @@ class BrowserPane(QWidget):
         self.view.setUrl(QUrl(url))
 
     def load_html_snapshot(self, html: str, base_url: str):
-        self.view.setHtml(html, baseUrl=QUrl(base_url))
-        self.status_label.setText("Loaded Reader-Mode snapshot (offline).")
+        html_size = len((html or "").encode("utf-8"))
+        if html_size > QT_WEBENGINE_SETHTML_LIMIT_BYTES:
+            fd, temp_path = tempfile.mkstemp(
+                suffix=".html",
+                prefix="ai-navigator-recovered-",
+            )
+            with os.fdopen(fd, "w", encoding="utf-8") as temp_file:
+                temp_file.write(html or "")
+            if not hasattr(self, "_recovered_snapshot_files"):
+                self._recovered_snapshot_files = []
+            self._recovered_snapshot_files.append(temp_path)
+            local_url = QUrl.fromLocalFile(temp_path)
+            print(
+                "[Recover] load_html_snapshot: using temp file "
+                f"html_size={html_size} limit={QT_WEBENGINE_SETHTML_LIMIT_BYTES} "
+                f"base_url={base_url} temp_path={temp_path}",
+                flush=True,
+            )
+            self.view.setUrl(local_url)
+            self.status_label.setText("Loaded large Reader-Mode snapshot from temp file.")
+        else:
+            print(
+                "[Recover] load_html_snapshot: using setHtml "
+                f"html_size={html_size} limit={QT_WEBENGINE_SETHTML_LIMIT_BYTES} "
+                f"base_url={base_url}",
+                flush=True,
+            )
+            self.view.setHtml(html, baseUrl=QUrl(base_url))
+            self.status_label.setText("Loaded Reader-Mode snapshot (offline).")
         self.url_bar.setText(base_url)
 
     def _on_load_started(self):
