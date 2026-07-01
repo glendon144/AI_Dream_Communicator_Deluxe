@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>WebMCP Relay Client</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <main class="page">
+    <section class="hero">
+      <h1>WebMCP Relay Client</h1>
+      <p>A local cockpit for testing WebMCP actions from jazz.clonesvr.com.</p>
+    </section>
+
+    <section class="panel">
+      <div class="row">
+        <button id="refresh">Refresh Actions</button>
+        <button id="status-button">Status</button>
+      </div>
+      <div id="status" class="status"></div>
+    </section>
+
+    <section class="grid">
+      <aside class="panel">
+        <h2>Actions</h2>
+        <div id="actions" class="actions"></div>
+      </aside>
+
+      <section class="panel">
+        <h2 id="selected-title">Select an action</h2>
+        <p id="selected-description" class="muted"></p>
+
+        <div id="parameter-panel" class="parameter-panel hidden">
+          <label for="value-select">Value</label>
+          <select id="value-select"></select>
+        </div>
+
+        <button id="call-button" disabled>Call Action</button>
+
+        <h3>Response</h3>
+        <pre id="response">{}</pre>
+      </section>
+    </section>
+  </main>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
