@@ -98,20 +98,41 @@ MEMORY_DB_PATH = Path("memory.db")
 
 K_WEAVE = 3  # Recover Memory Weave count
 QT_WEBENGINE_SETHTML_LIMIT_BYTES = 2 * 1024 * 1024
-WEBMCP_RELAY_ROOT = Path(os.getenv("WEBMCP_RELAY_ROOT", str(Path(__file__).resolve().parent.parent / "webmcp_relay"))).expanduser()
-WEBMCP_RELAY_SERVER = str(Path(os.getenv("WEBMCP_RELAY_SERVER", str(WEBMCP_RELAY_ROOT / "server.py"))).expanduser())
-WEBMCP_CLIENT_MODULE = str(Path(os.getenv("WEBMCP_CLIENT_MODULE", str(WEBMCP_RELAY_ROOT / "webmcp_relay_client" / "webmcp_client.py"))).expanduser())
+WEBMCP_RELAY_ROOT = Path(
+    os.getenv(
+        "WEBMCP_RELAY_ROOT",
+        str(Path(__file__).resolve().parent.parent / "webmcp_relay"),
+    )
+).expanduser()
+WEBMCP_RELAY_SERVER = str(
+    Path(
+        os.getenv("WEBMCP_RELAY_SERVER", str(WEBMCP_RELAY_ROOT / "server.py"))
+    ).expanduser()
+)
+WEBMCP_CLIENT_MODULE = str(
+    Path(
+        os.getenv(
+            "WEBMCP_CLIENT_MODULE",
+            str(WEBMCP_RELAY_ROOT / "webmcp_relay_client" / "webmcp_client.py"),
+        )
+    ).expanduser()
+)
 WEBMCP_FLASK_BASE_URL = os.getenv("WEBMCP_FLASK_BASE_URL", "http://127.0.0.1:5054")
 APP_DIR = Path(__file__).resolve().parent
 SUITE_DIR = APP_DIR.parent
 PIKIT_ROOT = Path(os.getenv("PIKIT_ROOT", str(SUITE_DIR / "PiKit-main"))).expanduser()
-FUNKIT_ROOT = Path(os.getenv("FUNKIT_ROOT", str(SUITE_DIR / "funkit-main"))).expanduser()
-GMAIL_JANITOR_SCRIPT = Path(os.getenv("GMAIL_JANITOR_SCRIPT", str(APP_DIR / "gmail_janitor.py"))).expanduser()
+FUNKIT_ROOT = Path(
+    os.getenv("FUNKIT_ROOT", str(SUITE_DIR / "funkit-main"))
+).expanduser()
+GMAIL_JANITOR_SCRIPT = Path(
+    os.getenv("GMAIL_JANITOR_SCRIPT", str(APP_DIR / "gmail_janitor.py"))
+).expanduser()
 
 
 # ---------------------------------------------------------------------------
 # Archive DB helpers (archive_pages)
 # ---------------------------------------------------------------------------
+
 
 def ensure_archive_table(db_path: Path):
     """
@@ -219,6 +240,7 @@ def save_archive_page(db_path: Path, url: str, title: str, html: str):
 # Memory DB helpers (memory.db)
 # ---------------------------------------------------------------------------
 
+
 def ensure_memory_table(db_path: Path):
     """
     Simple memory table for the Memory Pane:
@@ -314,7 +336,9 @@ class WebMCPRelayAdapter:
     def get_action(self, action_name: str) -> dict:
         if self.source_mode == "flask":
             return self._http_get(f"/api/action/{action_name}")
-        return self._client_or_stdio_call("webmcp_get_action", {"action_name": action_name})
+        return self._client_or_stdio_call(
+            "webmcp_get_action", {"action_name": action_name}
+        )
 
     def normalize_action_name(self, action) -> str:
         if isinstance(action, str):
@@ -346,7 +370,9 @@ class WebMCPRelayAdapter:
             },
         )
         if self.source_mode == "flask":
-            response = self._http_post("/api/call", {"name": action_name, "parameters": params})
+            response = self._http_post(
+                "/api/call", {"name": action_name, "parameters": params}
+            )
             webmcp_debug_log("adapter.call_action.response", response)
             return response
         response = self._client_or_stdio_call(
@@ -369,7 +395,10 @@ class WebMCPRelayAdapter:
                     return {"ok": False, "error": "No valid WebMCP action selected"}
                 return self._stdio_rpc(
                     "webmcp_call_action",
-                    {"action_name": action_name, "parameters": arguments.get("parameters", {})},
+                    {
+                        "action_name": action_name,
+                        "parameters": arguments.get("parameters", {}),
+                    },
                 )
             action_name = self.normalize_action_name(
                 arguments.get("action_name")
@@ -473,6 +502,7 @@ class WebMCPRelayAdapter:
     def _http_get(self, path: str) -> dict:
         try:
             import requests
+
             response = requests.get(WEBMCP_FLASK_BASE_URL + path, timeout=10)
             response.raise_for_status()
             return response.json()
@@ -482,7 +512,10 @@ class WebMCPRelayAdapter:
     def _http_post(self, path: str, payload: dict) -> dict:
         try:
             import requests
-            response = requests.post(WEBMCP_FLASK_BASE_URL + path, json=payload, timeout=10)
+
+            response = requests.post(
+                WEBMCP_FLASK_BASE_URL + path, json=payload, timeout=10
+            )
             response.raise_for_status()
             return response.json()
         except Exception as exc:
@@ -510,6 +543,7 @@ def load_memory_entries(db_path: Path, limit: int = 200):
 # ---------------------------------------------------------------------------
 # Clipboard helper (Qt + X11 fallbacks)
 # ---------------------------------------------------------------------------
+
 
 def copy_to_clipboard(text: str) -> bool:
     """
@@ -553,6 +587,7 @@ def copy_to_clipboard(text: str) -> bool:
 # ---------------------------------------------------------------------------
 # OpenVPN controller
 # ---------------------------------------------------------------------------
+
 
 class VPNController:
     """
@@ -648,6 +683,7 @@ class VPNController:
 # OPML export helpers
 # ---------------------------------------------------------------------------
 
+
 def _slug(s: str) -> str:
     s = re.sub(r"\s+", "-", (s or "").strip())
     s = re.sub(r"[^A-Za-z0-9\-_]+", "", s)
@@ -690,6 +726,7 @@ def _html_to_opml(html: str, title: str) -> str:
 # ---------------------------------------------------------------------------
 # Throbber
 # ---------------------------------------------------------------------------
+
 
 class ThrobberWidget(QWidget):
     """
@@ -780,6 +817,7 @@ class ThrobberWidget(QWidget):
 # Browser Pane
 # ---------------------------------------------------------------------------
 
+
 class BrowserPane(QWidget):
     """
     Left pane:
@@ -792,7 +830,9 @@ class BrowserPane(QWidget):
 
     browserFocusRequested = Signal()
 
-    def __init__(self, on_page_loaded=None, on_archive_request=None, on_memory_log=None):
+    def __init__(
+        self, on_page_loaded=None, on_archive_request=None, on_memory_log=None
+    ):
         super().__init__()
 
         self.on_page_loaded = on_page_loaded
@@ -984,7 +1024,9 @@ class BrowserPane(QWidget):
                 flush=True,
             )
             self.view.setUrl(local_url)
-            self.status_label.setText("Loaded large Reader-Mode snapshot from temp file.")
+            self.status_label.setText(
+                "Loaded large Reader-Mode snapshot from temp file."
+            )
         else:
             print(
                 "[Recover] load_html_snapshot: using setHtml "
@@ -1020,6 +1062,7 @@ class BrowserPane(QWidget):
 
         # Automatic memory logging (url, title, raw_html)
         if self.on_memory_log:
+
             def _got_html(html_str: str):
                 title = self.view.title() or current_url
                 self.on_memory_log(current_url, title, html_str)
@@ -1074,9 +1117,13 @@ class BrowserPane(QWidget):
         if not selector:
             return False, "WebMCP action is missing a selector."
         if method == "click" and not (
-            action_name.startswith(("open_", "visit_", "view_")) or "navigation" in action_name
+            action_name.startswith(("open_", "visit_", "view_"))
+            or "navigation" in action_name
         ):
-            return False, "Only visible click-navigation actions are executable in the webview."
+            return (
+                False,
+                "Only visible click-navigation actions are executable in the webview.",
+            )
         if method == "setValueAndChange" and "value" not in payload:
             params = payload.get("parameters") or {}
             if "value" not in params:
@@ -1123,9 +1170,15 @@ class BrowserPane(QWidget):
         def _done(result):
             ok = bool(isinstance(result, dict) and result.get("ok"))
             if ok:
-                self.status_label.setText(f"Executed WebMCP action: {payload.get('action')}")
+                self.status_label.setText(
+                    f"Executed WebMCP action: {payload.get('action')}"
+                )
             else:
-                detail = result.get("error") if isinstance(result, dict) else "unknown_webview_error"
+                detail = (
+                    result.get("error")
+                    if isinstance(result, dict)
+                    else "unknown_webview_error"
+                )
                 self.status_label.setText(f"WebMCP action failed: {detail}")
             if on_complete:
                 on_complete(ok, result)
@@ -1167,6 +1220,7 @@ class BrowserPane(QWidget):
 # ---------------------------------------------------------------------------
 # Results Pane
 # ---------------------------------------------------------------------------
+
 
 class ResultsPane(QWidget):
     """
@@ -1448,6 +1502,7 @@ class ResultsPane(QWidget):
 # Capsule builders
 # ---------------------------------------------------------------------------
 
+
 def _clean_for_capsule(s: str) -> str:
     s = s.replace("```", "ʼʼʼ")
     s = re.sub(r"\s+\n", "\n", s)
@@ -1620,6 +1675,7 @@ def build_global_weave_packet(
 # Outline Pane
 # ---------------------------------------------------------------------------
 
+
 class OutlinePane(QWidget):
     """
     OPML Outline browser.
@@ -1746,8 +1802,7 @@ class MemoryPane(QWidget):
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
         self.tree.setStyleSheet(
-            "background-color: #1e1e1e; color: #c0ffc0; "
-            "font-family: monospace;"
+            "background-color: #1e1e1e; color: #c0ffc0; " "font-family: monospace;"
         )
 
         # Refresh button
@@ -1831,7 +1886,6 @@ class MemoryPane(QWidget):
             self.openUrlRequested.emit(url)
 
 
-
 class GmailPane(QWidget):
     """
     Gmail janitor control pane.
@@ -1859,11 +1913,15 @@ class GmailPane(QWidget):
         )
 
         self.query_edit = QLineEdit()
-        self.query_edit.setPlaceholderText("Gmail query, e.g. from:(@example.com) older_than:30d")
+        self.query_edit.setPlaceholderText(
+            "Gmail query, e.g. from:(@example.com) older_than:30d"
+        )
         self.query_edit.setText("from:(@alignpromptfundssolutionsflagship.com)")
 
         self.message_id_edit = QLineEdit()
-        self.message_id_edit.setPlaceholderText("Current Gmail message/thread id, optional")
+        self.message_id_edit.setPlaceholderText(
+            "Current Gmail message/thread id, optional"
+        )
         self.message_id_edit.setToolTip(
             "When set, Gmail Janitor acts on this specific Gmail message id instead of using the search query."
         )
@@ -1919,7 +1977,11 @@ class GmailPane(QWidget):
             "}"
             "QPushButton:pressed { background-color: #52260f; }"
         )
-        for button in (self.use_current_button, self.dry_archive_button, self.dry_spam_trash_button):
+        for button in (
+            self.use_current_button,
+            self.dry_archive_button,
+            self.dry_spam_trash_button,
+        ):
             button.setStyleSheet(btn_style)
         for button in (self.live_archive_button, self.live_spam_trash_button):
             button.setStyleSheet(caution_style)
@@ -1961,10 +2023,18 @@ class GmailPane(QWidget):
         self.setLayout(layout)
 
         self.use_current_button.clicked.connect(self.use_open_gmail_message)
-        self.dry_archive_button.clicked.connect(lambda: self.run_janitor("archive", do_it=False))
-        self.live_archive_button.clicked.connect(lambda: self.run_janitor("archive", do_it=True))
-        self.dry_spam_trash_button.clicked.connect(lambda: self.run_janitor("spam-trash", do_it=False))
-        self.live_spam_trash_button.clicked.connect(lambda: self.run_janitor("spam-trash", do_it=True))
+        self.dry_archive_button.clicked.connect(
+            lambda: self.run_janitor("archive", do_it=False)
+        )
+        self.live_archive_button.clicked.connect(
+            lambda: self.run_janitor("archive", do_it=True)
+        )
+        self.dry_spam_trash_button.clicked.connect(
+            lambda: self.run_janitor("spam-trash", do_it=False)
+        )
+        self.live_spam_trash_button.clicked.connect(
+            lambda: self.run_janitor("spam-trash", do_it=True)
+        )
         self.commandFinished.connect(self._handle_command_finished)
 
     def _set_buttons_enabled(self, enabled: bool):
@@ -2007,11 +2077,13 @@ class GmailPane(QWidget):
         else:
             cmd.extend(["--query", query])
 
-        cmd.extend([
-            f"--{action}",
-            "--max",
-            str(max_count),
-        ])
+        cmd.extend(
+            [
+                f"--{action}",
+                "--max",
+                str(max_count),
+            ]
+        )
 
         if self.include_spam_trash.isChecked() and not message_id:
             cmd.append("--include-spam-trash")
@@ -2161,7 +2233,9 @@ class GmailPane(QWidget):
                 return
 
             if not result.get("ok"):
-                detail = result.get("error") or "Could not identify the open Gmail message."
+                detail = (
+                    result.get("error") or "Could not identify the open Gmail message."
+                )
                 href = result.get("href") or current_url
                 QMessageBox.warning(self, "Gmail Janitor", f"{detail}\n\nURL: {href}")
                 self.output_view.setPlainText(
@@ -2181,7 +2255,9 @@ class GmailPane(QWidget):
 
             if gmail_id and not gmail_id.startswith("FMfc"):
                 self.message_id_edit.setText(gmail_id)
-                self.status_label.setText(f"Captured Gmail message id from browser pane: {gmail_id}")
+                self.status_label.setText(
+                    f"Captured Gmail message id from browser pane: {gmail_id}"
+                )
                 self.output_view.setPlainText(
                     "Captured current Gmail message from browser pane.\n"
                     f"Message ID: {gmail_id}\n"
@@ -2204,7 +2280,9 @@ class GmailPane(QWidget):
             if query:
                 self.query_edit.setText(query)
                 self.message_id_edit.clear()
-                self.status_label.setText("Built a narrow Gmail query from the open message.")
+                self.status_label.setText(
+                    "Built a narrow Gmail query from the open message."
+                )
                 self.output_view.setPlainText(
                     "AI Navigator built a narrow Gmail query from the open message.\n"
                     "This is safer than using Gmail's web-only FMfc thread token as an API id.\n\n"
@@ -2225,7 +2303,9 @@ class GmailPane(QWidget):
 
     def run_janitor(self, action: str, do_it: bool):
         if self._running:
-            QMessageBox.information(self, "Gmail Janitor", "A Gmail command is already running.")
+            QMessageBox.information(
+                self, "Gmail Janitor", "A Gmail command is already running."
+            )
             return
 
         try:
@@ -2299,6 +2379,7 @@ class GmailPane(QWidget):
 # ---------------------------------------------------------------------------
 # Gmail Pane
 # ---------------------------------------------------------------------------
+
 
 class WebMCPActionsPane(QWidget):
     def __init__(self, browser_pane: BrowserPane):
@@ -2374,7 +2455,10 @@ class WebMCPActionsPane(QWidget):
         self.execute_button.clicked.connect(self.execute_selected_action)
         self.actions_list.currentItemChanged.connect(self._handle_selection_change)
 
-        self.refresh()
+        if not Path(WEBMCP_RELAY_SERVER).exists():
+            self.status_label.setText(f"WebMCP relay not found:\n{WEBMCP_RELAY_SERVER}")
+        else:
+            self.refresh()
 
     def _selected_action_name(self) -> str:
         return self.adapter.normalize_action_name(self.selected_action)
@@ -2392,7 +2476,9 @@ class WebMCPActionsPane(QWidget):
 
         status = self.adapter.status()
         if not self.actions and status.get("ok") is False:
-            self.status_label.setText(str(status.get("error") or "Could not load WebMCP actions."))
+            self.status_label.setText(
+                str(status.get("error") or "Could not load WebMCP actions.")
+            )
             return
 
         for action in self.actions:
@@ -2404,7 +2490,9 @@ class WebMCPActionsPane(QWidget):
             self.actions_list.addItem(item)
 
         title = status.get("title") or status.get("name") or "WebMCP"
-        self.status_label.setText(f"{title}: loaded {len(self.actions)} actions via {self.adapter.source_mode}.")
+        self.status_label.setText(
+            f"{title}: loaded {len(self.actions)} actions via {self.adapter.source_mode}."
+        )
         self.payload_view.setPlainText(json.dumps(status, indent=2, sort_keys=True))
 
     def _handle_selection_change(self, current, previous):
@@ -2462,7 +2550,11 @@ class WebMCPActionsPane(QWidget):
         webmcp_debug_log("pane.inspect_selected_action.response", payload)
         self.payload_view.setPlainText(json.dumps(payload, indent=2, sort_keys=True))
         self.status_label.setText(
-            str(payload.get("suggested_browser_instruction") or payload.get("error") or "Instruction JSON updated.")
+            str(
+                payload.get("suggested_browser_instruction")
+                or payload.get("error")
+                or "Instruction JSON updated."
+            )
         )
 
     def execute_selected_action(self):
@@ -2485,13 +2577,20 @@ class WebMCPActionsPane(QWidget):
             self.status_label.setText(error)
             QMessageBox.warning(self, "Invalid action", error)
             return
-        if not isinstance(self.last_payload, dict) or self.last_payload.get("action") != action_name:
+        if (
+            not isinstance(self.last_payload, dict)
+            or self.last_payload.get("action") != action_name
+        ):
             self.inspect_selected_action()
         payload = self.last_payload or {}
         webmcp_debug_log("pane.execute_selected_action.payload", payload)
         if not payload.get("ok"):
             webmcp_debug_log("pane.execute_selected_action.blocked", payload)
-            QMessageBox.warning(self, "Action blocked", str(payload.get("error") or "Action is not executable."))
+            QMessageBox.warning(
+                self,
+                "Action blocked",
+                str(payload.get("error") or "Action is not executable."),
+            )
             return
 
         def _done(ok: bool, result):
@@ -2502,19 +2601,29 @@ class WebMCPActionsPane(QWidget):
             if isinstance(result, dict):
                 merged = dict(payload)
                 merged["webview_execution"] = result
-                self.payload_view.setPlainText(json.dumps(merged, indent=2, sort_keys=True))
+                self.payload_view.setPlainText(
+                    json.dumps(merged, indent=2, sort_keys=True)
+                )
             if ok:
-                self.status_label.setText(f"Executed {payload.get('action')} in the current webview.")
+                self.status_label.setText(
+                    f"Executed {payload.get('action')} in the current webview."
+                )
             else:
-                detail = result.get("error") if isinstance(result, dict) else "unknown_webview_error"
+                detail = (
+                    result.get("error")
+                    if isinstance(result, dict)
+                    else "unknown_webview_error"
+                )
                 self.status_label.setText(f"Execution blocked or failed: {detail}")
 
         self.browser_pane.execute_webmcp_action(payload, _done)
 
-
     # ---------------------------------------------------------------------------
+
+
 # Main Window
 # ---------------------------------------------------------------------------
+
 
 class MainWindow(QWidget):
     """
@@ -2581,7 +2690,9 @@ class MainWindow(QWidget):
 
         self._saved_outer_splitter_sizes = self.outer_splitter.sizes()
         self._saved_mid_splitter_sizes = self.mid_splitter.sizes()
-        browser_width = max(self.outer_splitter.width(), sum(self._saved_outer_splitter_sizes), 1)
+        browser_width = max(
+            self.outer_splitter.width(), sum(self._saved_outer_splitter_sizes), 1
+        )
 
         self.mid_splitter.setSizes([0] * self.mid_splitter.count())
         self.outer_splitter.setSizes([browser_width, 0])
@@ -2642,6 +2753,7 @@ class MainWindow(QWidget):
 # ---------------------------------------------------------------------------
 # Product launcher panes
 # ---------------------------------------------------------------------------
+
 
 class ProductLauncherPane(QWidget):
     """
@@ -2735,24 +2847,31 @@ class ProductLauncherPane(QWidget):
 
     def _append_stdout(self):
         if self.process:
-            text = bytes(self.process.readAllStandardOutput()).decode("utf-8", errors="replace")
+            text = bytes(self.process.readAllStandardOutput()).decode(
+                "utf-8", errors="replace"
+            )
             self.output_view.append(text.rstrip())
 
     def _append_stderr(self):
         if self.process:
-            text = bytes(self.process.readAllStandardError()).decode("utf-8", errors="replace")
+            text = bytes(self.process.readAllStandardError()).decode(
+                "utf-8", errors="replace"
+            )
             self.output_view.append(text.rstrip())
 
     def _handle_finished(self, exit_code: int, exit_status):
         self.status_label.setText(f"{self.title} exited with code {exit_code}.")
 
     def _handle_error(self, error):
-        self.status_label.setText(f"Could not launch {self.title}: {self.process.errorString()}")
+        self.status_label.setText(
+            f"Could not launch {self.title}: {self.process.errorString()}"
+        )
 
 
 # ---------------------------------------------------------------------------
 # Suite Shell
 # ---------------------------------------------------------------------------
+
 
 class SuiteShell(QWidget):
     """
@@ -2803,6 +2922,7 @@ class SuiteShell(QWidget):
 # main()
 # ---------------------------------------------------------------------------
 
+
 def main():
     os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox")
     app = QApplication(sys.argv)
@@ -2811,12 +2931,18 @@ def main():
     sys.exit(app.exec())
 
 
-def test_webmcp_adapter(action_name: str = "open_kxci", source_mode: str = "stdio") -> int:
+def test_webmcp_adapter(
+    action_name: str = "open_kxci", source_mode: str = "stdio"
+) -> int:
     adapter = WebMCPRelayAdapter(source_mode=source_mode)
     status = adapter.status()
     actions = adapter.list_actions()
     selected = next(
-        (action for action in actions if adapter.normalize_action_name(action) == action_name),
+        (
+            action
+            for action in actions
+            if adapter.normalize_action_name(action) == action_name
+        ),
         None,
     )
     params = {}
@@ -2830,16 +2956,18 @@ def test_webmcp_adapter(action_name: str = "open_kxci", source_mode: str = "stdi
         {"action_name": action_name, "parameters": params, "response": response},
     )
 
-    print(json.dumps(
-        {
-            "status": status,
-            "actions_count": len(actions),
-            "selected_action": selected,
-            "call_response": response,
-        },
-        indent=2,
-        sort_keys=True,
-    ))
+    print(
+        json.dumps(
+            {
+                "status": status,
+                "actions_count": len(actions),
+                "selected_action": selected,
+                "call_response": response,
+            },
+            indent=2,
+            sort_keys=True,
+        )
+    )
     return 0 if response.get("ok") is True else 1
 
 
@@ -2847,7 +2975,9 @@ if __name__ == "__main__":
     if "--test-webmcp-adapter" in sys.argv:
         test_index = sys.argv.index("--test-webmcp-adapter")
         action_name = "open_kxci"
-        if test_index + 1 < len(sys.argv) and not sys.argv[test_index + 1].startswith("--"):
+        if test_index + 1 < len(sys.argv) and not sys.argv[test_index + 1].startswith(
+            "--"
+        ):
             action_name = sys.argv[test_index + 1]
         raise SystemExit(test_webmcp_adapter(action_name=action_name))
     main()
