@@ -30,7 +30,7 @@ import tempfile
 import xml.etree.ElementTree as ET
 from pathlib import Path
 from datetime import datetime
-from urllib.parse import urlparse
+from urllib.parse import urlparse, urljoin
 import threading
 import time
 
@@ -309,6 +309,98 @@ def webmcp_debug_log(event: str, payload=None) -> None:
     except Exception:
         rendered = repr(payload)
     print(f"[{ts}] [webmcp] {event}: {rendered}", file=sys.stderr, flush=True)
+
+
+def _webmcp_slug(value: str) -> str:
+    slug = re.sub(r"[^a-zA-Z0-9]+", "_", str(value or "").strip().lower()).strip("_")
+    return slug or "action"
+
+
+def _extract_webmcp_json_actions(html: str, base_url: str) -> list[dict]:
+    """Extract actions from <script type="application/webmcp+json"> blocks."""
+    actions: list[dict] = []
+    pattern = re.compile(
+        r"<script[^>]*type=[\"']application/webmcp\+json[\"'][^>]*>(.*?)</script>",
+        re.IGNORECASE | re.DOTALL,
+    )
+    for match in pattern.finditer(html or ""):
+        raw = match.group(1).strip()
+        if not raw:
+            continue
+        try:
+            payload = json.loads(raw)
+        except Exception as exc:
+            webmcp_debug_log("page_miner.json_parse_error", {"error": str(exc)})
+            continue
+        candidates = payload.get("actions", payload if isinstance(payload, list) else [])
+        if not isinstance(candidates, list):
+            continue
+        for action in candidates:
+            if not isinstance(action, dict):
+                continue
+            name = str(action.get("name") or action.get("action") or "").strip()
+            selector = str(action.get("selector") or "").strip()
+            if not name or not selector:
+                continue
+            item = dict(action)
+            item.setdefault("name", name)
+            item.setdefault("method", "click")
+            item.setdefault("risk", item.get("risk_category") or "navigation")
+            item.setdefault("risk_category", item.get("risk") or "navigation")
+            item.setdefault("homepage", base_url)
+            item.setdefault("source", "current_page_manifest")
+            if item.get("url"):
+                item["url"] = urljoin(base_url, str(item.get("url")))
+            actions.append(item)
+    return actions
+
+
+def mine_webmcp_actions_from_html(html: str, base_url: str = "") -> list[dict]:
+    """Mine simple WebMCP navigation actions from the currently displayed HTML.
+
+    Supported page hooks:
+      - <script type="application/webmcp+json">{"actions": [...]}</script>
+      - Elements with data-mcp, data-mcp-action, data-mcp-url,
+        data-mcp-description, and data-mcp-risk attributes.
+    """
+    html = html or ""
+    base_url = base_url or ""
+    actions = _extract_webmcp_json_actions(html, base_url)
+    seen = {str(a.get("name")) for a in actions if a.get("name")}
+
+    tag_pattern = re.compile(r"<(?P<tag>a|button|input)\b(?P<attrs>[^>]*)>", re.IGNORECASE | re.DOTALL)
+    attr_pattern = re.compile(r"([:\w-]+)\s*=\s*(['\"])(.*?)\2", re.IGNORECASE | re.DOTALL)
+
+    for match in tag_pattern.finditer(html):
+        attrs_raw = match.group("attrs") or ""
+        attrs = {k.lower(): v for k, _q, v in attr_pattern.findall(attrs_raw)}
+        mcp_id = (attrs.get("data-mcp") or "").strip()
+        if not mcp_id:
+            continue
+        label = (attrs.get("value") or attrs.get("aria-label") or attrs.get("title") or mcp_id).strip()
+        name = (attrs.get("data-mcp-action") or f"open_{_webmcp_slug(label or mcp_id)}").strip()
+        if not name or name in seen:
+            continue
+        url = (attrs.get("data-mcp-url") or attrs.get("href") or "").strip()
+        description = (attrs.get("data-mcp-description") or f"Open {label}.").strip()
+        risk = (attrs.get("data-mcp-risk") or "navigation").strip()
+        action = {
+            "name": name,
+            "description": description,
+            "method": "click",
+            "selector": f"[data-mcp='{mcp_id}']",
+            "risk": risk,
+            "risk_category": risk,
+            "safety_note": "Navigation actions are user-visible only and default to instruction-only responses.",
+            "homepage": base_url,
+            "source": "current_page_dom",
+        }
+        if url:
+            action["url"] = urljoin(base_url, url)
+        actions.append(action)
+        seen.add(name)
+
+    return actions
 
 
 class WebMCPRelayAdapter:
@@ -2469,30 +2561,67 @@ class WebMCPActionsPane(QWidget):
 
     def refresh(self):
         self.actions_list.clear()
-        self.actions = self.adapter.list_actions()
+        self.actions = []
         self.selected_action = None
         self.last_payload = None
         self.payload_view.clear()
+        self.status_label.setText("Mining current page for WebMCP actions…")
 
-        status = self.adapter.status()
-        if not self.actions and status.get("ok") is False:
-            self.status_label.setText(
-                str(status.get("error") or "Could not load WebMCP actions.")
+        def _got_html(html_str: str):
+            current_url = self.browser_pane.view.url().toString()
+            page_actions = mine_webmcp_actions_from_html(html_str, current_url)
+            if page_actions:
+                status = {
+                    "ok": True,
+                    "title": "Current page",
+                    "source": "current_page",
+                    "url": current_url,
+                    "actions": len(page_actions),
+                }
+                self._set_actions(
+                    page_actions,
+                    status,
+                    f"Current page: loaded {len(page_actions)} WebMCP actions.",
+                )
+                return
+
+            actions = self.adapter.list_actions()
+            status = self.adapter.status()
+            if not actions and status.get("ok") is False:
+                self.status_label.setText(
+                    str(status.get("error") or "Could not load WebMCP actions.")
+                )
+                self.payload_view.setPlainText(json.dumps(status, indent=2, sort_keys=True))
+                return
+
+            title = status.get("title") or status.get("name") or "WebMCP"
+            self._set_actions(
+                actions,
+                status,
+                f"{title}: loaded {len(actions)} actions via {self.adapter.source_mode} fallback.",
             )
-            return
+
+        self.browser_pane.view.page().toHtml(_got_html)
+
+    def _set_actions(self, actions: list[dict], status: dict, message: str):
+        self.actions_list.clear()
+        self.actions = actions if isinstance(actions, list) else []
+        self.selected_action = None
+        self.last_payload = None
 
         for action in self.actions:
             label = f"{action.get('name', '(unnamed)')} [{action.get('method', '?')}]"
-            if action.get("risk"):
-                label += f" · {action.get('risk')}"
+            risk = action.get("risk") or action.get("risk_category")
+            if risk:
+                label += f" · {risk}"
+            source = action.get("source")
+            if source:
+                label += f" · {source}"
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, action)
             self.actions_list.addItem(item)
 
-        title = status.get("title") or status.get("name") or "WebMCP"
-        self.status_label.setText(
-            f"{title}: loaded {len(self.actions)} actions via {self.adapter.source_mode}."
-        )
+        self.status_label.setText(message)
         self.payload_view.setPlainText(json.dumps(status, indent=2, sort_keys=True))
 
     def _handle_selection_change(self, current, previous):
