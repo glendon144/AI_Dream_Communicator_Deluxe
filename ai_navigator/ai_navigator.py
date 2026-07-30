@@ -2997,6 +2997,7 @@ class MainWindow(QWidget):
         self._browser_focus_active = False
         self._saved_outer_splitter_sizes = None
         self._saved_mid_splitter_sizes = None
+        self._saved_mid_visibility = None
 
         self.results_pane.recoveredPage.connect(self._handle_recovered_page)
         self.memory_pane.openUrlRequested.connect(self.browser_pane.load_from_memory)
@@ -3007,7 +3008,8 @@ class MainWindow(QWidget):
         self.mid_splitter.addWidget(self.memory_pane)
         self.mid_splitter.addWidget(self.gmail_pane)
         self.mid_splitter.addWidget(self.webmcp_pane)
-        self.mid_splitter.setSizes([300, 320, 360, 420])
+        self.mid_splitter.setSizes([300, 320, 0, 420])
+        self.gmail_pane.hide()
         for index in range(self.mid_splitter.count()):
             self.mid_splitter.setCollapsible(index, True)
 
@@ -3077,6 +3079,8 @@ class MainWindow(QWidget):
     def _restore_default_layout(self):
         if self._browser_focus_active:
             self._restore_browser_focus()
+        for i in range(self.mid_splitter.count()):
+            self.mid_splitter.widget(i).show()
         self.outer_splitter.setSizes([900, 700])
         self.mid_splitter.setSizes([300, 320, 360, 420])
 
@@ -3086,10 +3090,16 @@ class MainWindow(QWidget):
 
         self._saved_outer_splitter_sizes = self.outer_splitter.sizes()
         self._saved_mid_splitter_sizes = self.mid_splitter.sizes()
+        self._saved_mid_visibility = [
+            self.mid_splitter.widget(i).isVisible()
+            for i in range(self.mid_splitter.count())
+        ]
         browser_width = max(
             self.outer_splitter.width(), sum(self._saved_outer_splitter_sizes), 1
         )
 
+        for i in range(self.mid_splitter.count()):
+            self.mid_splitter.widget(i).hide()
         self.mid_splitter.setSizes([0] * self.mid_splitter.count())
         self.outer_splitter.setSizes([browser_width, 0])
         self._browser_focus_active = True
@@ -3099,6 +3109,9 @@ class MainWindow(QWidget):
         if not self._browser_focus_active:
             return
 
+        if self._saved_mid_visibility:
+            for i, visible in enumerate(self._saved_mid_visibility):
+                self.mid_splitter.widget(i).setVisible(visible)
         if self._saved_mid_splitter_sizes:
             self.mid_splitter.setSizes(self._saved_mid_splitter_sizes)
         if self._saved_outer_splitter_sizes:
@@ -3107,20 +3120,24 @@ class MainWindow(QWidget):
         self._browser_focus_active = False
         self._saved_outer_splitter_sizes = None
         self._saved_mid_splitter_sizes = None
+        self._saved_mid_visibility = None
         self.browser_pane.set_browser_focus_active(False)
 
     def _focus_side_pane(self, pane_index: int):
         if self._browser_focus_active:
             self._restore_browser_focus()
 
+        for i in range(self.mid_splitter.count()):
+            self.mid_splitter.widget(i).setVisible(i == pane_index)
+
         outer_width = max(self.outer_splitter.width(), 1)
         browser_width = max(int(outer_width * 0.48), 520)
         side_width = max(outer_width - browser_width, 420)
         self.outer_splitter.setSizes([browser_width, side_width])
 
-        sizes = [180] * self.mid_splitter.count()
+        sizes = [0] * self.mid_splitter.count()
         if 0 <= pane_index < len(sizes):
-            sizes[pane_index] = 720
+            sizes[pane_index] = side_width
         self.mid_splitter.setSizes(sizes)
 
     def _handle_page_loaded(self, url_str: str):
