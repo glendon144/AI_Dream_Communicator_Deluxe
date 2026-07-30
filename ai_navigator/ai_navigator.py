@@ -42,6 +42,7 @@ from PySide6.QtCore import (
     QRect,
     QUrl,
     QProcess,
+    QProcessEnvironment,
     Signal,
 )
 from PySide6.QtGui import (
@@ -78,6 +79,9 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QCheckBox,
     QStackedWidget,
+    QDialog,
+    QDialogButtonBox,
+    QFileDialog,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from bs4 import BeautifulSoup  # for OPML export parsing
@@ -296,6 +300,86 @@ def _make_section_subtitle(text: str) -> QLabel:
     label.setObjectName("sectionSubtitle")
     label.setWordWrap(True)
     return label
+
+
+class EnvKeyPromptDialog(QDialog):
+    def __init__(self, env_key: str, product_name: str, parent=None):
+        super().__init__(parent)
+        self.env_key = env_key
+        self.setWindowTitle(f"{product_name} Setup")
+        self.setMinimumWidth(620)
+
+        layout = QVBoxLayout()
+        layout.setContentsMargins(18, 18, 18, 18)
+        layout.setSpacing(12)
+
+        title = QLabel(f"{product_name} requires {env_key}")
+        title.setObjectName("sectionTitle")
+
+        help_text = QLabel(
+            f"{env_key} is not set in the environment.\n"
+            "Paste the key below, or choose a file that contains just the key."
+        )
+        help_text.setWordWrap(True)
+
+        self.value_edit = QLineEdit()
+        self.value_edit.setPlaceholderText(f"Paste {env_key} here")
+        self.value_edit.setEchoMode(QLineEdit.Password)
+
+        picker_row = QHBoxLayout()
+        picker_row.setContentsMargins(0, 0, 0, 0)
+        picker_row.setSpacing(8)
+        self.file_path_edit = QLineEdit()
+        self.file_path_edit.setPlaceholderText("Optional: choose a key file")
+        self.file_path_edit.setReadOnly(True)
+        browse_button = QPushButton("Choose File…")
+        _set_button_role(browse_button, "secondary")
+        browse_button.clicked.connect(self._browse_for_key_file)
+        picker_row.addWidget(self.file_path_edit, 1)
+        picker_row.addWidget(browse_button)
+
+        button_box = QDialogButtonBox(
+            QDialogButtonBox.Ok | QDialogButtonBox.Cancel, parent=self
+        )
+        ok_button = button_box.button(QDialogButtonBox.Ok)
+        cancel_button = button_box.button(QDialogButtonBox.Cancel)
+        if ok_button is not None:
+            _set_button_role(ok_button, "primary")
+        if cancel_button is not None:
+            _set_button_role(cancel_button, "secondary")
+        button_box.accepted.connect(self.accept)
+        button_box.rejected.connect(self.reject)
+
+        layout.addWidget(title)
+        layout.addWidget(help_text)
+        layout.addWidget(self.value_edit)
+        layout.addLayout(picker_row)
+        layout.addWidget(button_box)
+        self.setLayout(layout)
+
+    def _browse_for_key_file(self):
+        filename, _ = QFileDialog.getOpenFileName(
+            self,
+            "Choose Key File",
+            str(Path.home()),
+            "All Files (*)",
+        )
+        if not filename:
+            return
+        self.file_path_edit.setText(filename)
+        try:
+            value = Path(filename).read_text(encoding="utf-8").strip()
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "Could not read key file",
+                f"Failed to read {filename}\n\n{exc}",
+            )
+            return
+        self.value_edit.setText(value)
+
+    def key_value(self) -> str:
+        return self.value_edit.text().strip()
 
 
 def ensure_archive_table(db_path: Path):
@@ -3145,6 +3229,43 @@ class ProductLauncherPane(QWidget):
             return venv_python
         return Path(sys.executable)
 
+    def _required_env_keys(self) -> list[str]:
+        if self.title == "PiKit":
+            return ["BASETEN_API_KEY"]
+        return []
+
+    def _ensure_launch_environment(self) -> QProcessEnvironment | None:
+        env = QProcessEnvironment.systemEnvironment()
+        for env_key in self._required_env_keys():
+            current_value = (os.environ.get(env_key) or "").strip()
+            if current_value:
+                env.insert(env_key, current_value)
+                continue
+
+            dialog = EnvKeyPromptDialog(env_key, self.title, parent=self)
+            if dialog.exec() != QDialog.Accepted:
+                self.status_label.setText(
+                    f"{self.title} launch canceled: missing {env_key}."
+                )
+                return None
+
+            key_value = dialog.key_value()
+            if not key_value:
+                QMessageBox.warning(
+                    self,
+                    f"{self.title} Setup",
+                    f"No value was provided for {env_key}.",
+                )
+                self.status_label.setText(
+                    f"{self.title} launch canceled: missing {env_key}."
+                )
+                return None
+
+            os.environ[env_key] = key_value
+            env.insert(env_key, key_value)
+
+        return env
+
     def launch_product(self):
         if self.process and self.process.state() != QProcess.NotRunning:
             self.status_label.setText(f"{self.title} is already running.")
@@ -3160,9 +3281,14 @@ class ProductLauncherPane(QWidget):
             self.status_label.setText(f"Missing Python executable: {python_exe}")
             return
 
+        launch_env = self._ensure_launch_environment()
+        if launch_env is None:
+            return
+
         self.output_view.clear()
         self.process = QProcess(self)
         self.process.setWorkingDirectory(str(self.root_path))
+        self.process.setProcessEnvironment(launch_env)
         self.process.setProgram(str(python_exe))
         self.process.setArguments([str(entrypoint)])
         self.process.readyReadStandardOutput.connect(self._append_stdout)
