@@ -22,6 +22,7 @@ import sys
 import re
 import os
 import json
+import html
 import importlib.util
 import webbrowser
 import subprocess
@@ -945,8 +946,15 @@ def _slug(s: str) -> str:
     return s or "page"
 
 
-def _html_to_opml(html: str, title: str) -> str:
-    soup = BeautifulSoup(html or "", "lxml")
+def _parse_html_document(html_text: str) -> BeautifulSoup:
+    try:
+        return BeautifulSoup(html_text or "", "lxml")
+    except Exception:
+        return BeautifulSoup(html_text or "", "html.parser")
+
+
+def _html_to_opml(html_text: str, title: str) -> str:
+    soup = _parse_html_document(html_text or "")
     doc_title = (title or (soup.title.string if soup.title else "")) or "Untitled"
     nodes = []
     for tag in soup.find_all(["h1", "h2", "h3", "h4", "h5", "h6"]):
@@ -958,7 +966,7 @@ def _html_to_opml(html: str, title: str) -> str:
     out = [
         '<?xml version="1.0"?>',
         '<opml version="2.0"><head>',
-        f"<title>{doc_title}</title>",
+        f"<title>{html.escape(doc_title)}</title>",
         "</head><body>",
     ]
 
@@ -967,7 +975,7 @@ def _html_to_opml(html: str, title: str) -> str:
         while stack and level <= stack[-1]:
             out.append("</outline>")
             stack.pop()
-        out.append(f'<outline text="{text}">')
+        out.append(f'<outline text="{html.escape(text, quote=True)}">')
         stack.append(level)
 
     while len(stack) > 1:
