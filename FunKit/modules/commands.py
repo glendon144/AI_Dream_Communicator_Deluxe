@@ -130,7 +130,8 @@ class CommandProcessor:
         elif cmd == 'ASK':
             prompt = ' '.join(parts[1:])
             reply = self.ai.ask(prompt)
-            reply = sanitize_ai_reply(reply)
+            finish_reason = getattr(self.ai, "last_finish_reason", None)
+            reply = sanitize_ai_reply(reply, finish_reason=finish_reason)
             print("AI Response:\n", reply)
             self.logger.log("user", "ASK", details=prompt)
 
@@ -145,7 +146,8 @@ class CommandProcessor:
                 return
             text = doc.iloc[0]['body']
             reply = self.ai.ask(f"Please summarize the following document:\n{text}")
-            reply = sanitize_ai_reply(reply)
+            finish_reason = getattr(self.ai, "last_finish_reason", None)
+            reply = sanitize_ai_reply(reply, finish_reason=finish_reason)
             print("Summary:\n", reply)
             self.logger.log("user", "SUMMARIZE", doc_id)
 

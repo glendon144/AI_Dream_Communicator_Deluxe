@@ -91,6 +91,7 @@ class AIInterface:
         self._session = requests.Session()
         self._system_prompt: str | None = None
         self._extra_headers: Headers = {}
+        self._last_finish_reason: str | None = None
 
         # Install retries (idempotent POSTs to LLMs are generally safe to retry)
         retry = Retry(
@@ -163,6 +164,10 @@ class AIInterface:
             return f"{short}\n{body[:800]}"
         return f"{short}\n{body}"
 
+    @property
+    def last_finish_reason(self) -> str | None:
+        return self._last_finish_reason
+
     def _extract_text(self, resp: requests.Response) -> str:
         try:
             resp.raise_for_status()
@@ -172,13 +177,17 @@ class AIInterface:
             data = resp.json()
         except Exception as e:
             raise RuntimeError(f"Bad JSON from server: {e}\n{resp.text[:800]}")
-        # Chat primary
+        self._last_finish_reason = None
         try:
-            return data["choices"][0]["message"]["content"] or ""
+            choice = data["choices"][0]
+            self._last_finish_reason = choice.get("finish_reason")
+            return choice["message"]["content"] or ""
         except Exception:
             # Completion fallback
             try:
-                return data["choices"][0].get("text", "") or ""
+                choice = data["choices"][0]
+                self._last_finish_reason = choice.get("finish_reason")
+                return choice.get("text", "") or ""
             except Exception:
                 raise RuntimeError(f"Unexpected response: {json.dumps(data)[:600]}")
 

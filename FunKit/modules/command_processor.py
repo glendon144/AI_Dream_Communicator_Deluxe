@@ -16,8 +16,8 @@ from modules.text_sanitizer import sanitize_ai_reply
 
 # ------------ Config (env-tunable) ------------
 SHORT_THRESHOLD_TOKENS = int(os.getenv("PIKIT_SHORT_THRESHOLD_TOKENS", "200"))
-SHORT_MAX_TOKENS       = int(os.getenv("PIKIT_SHORT_MAX_TOKENS", "220"))   # quick replies
-LONG_MAX_TOKENS        = int(os.getenv("PIKIT_LONG_MAX_TOKENS", "900"))    # detailed replies
+SHORT_MAX_TOKENS       = int(os.getenv("PIKIT_SHORT_MAX_TOKENS", "2048"))  # quick replies
+LONG_MAX_TOKENS        = int(os.getenv("PIKIT_LONG_MAX_TOKENS", "4096"))   # detailed replies
 # If you simply want to "double tokens", bump LONG_MAX_TOKENS and/or SHORT_MAX_TOKENS above.
 # Timeout was already made env-configurable in ai_interface/local_ai_interface earlier.
 
@@ -215,10 +215,10 @@ class CommandProcessor:
             try:
                 response = self.ai.query(full_prompt, **kwargs)
             except TypeError:
-                # Fallback if interface doesn't accept overrides kwarg
                 response = self.ai.query(full_prompt)
 
-            response = sanitize_ai_reply(response)
+            finish_reason = getattr(self.ai, "last_finish_reason", None)
+            response = sanitize_ai_reply(response, finish_reason=finish_reason)
             self.logger.info("AI response received successfully")
             self._update_memory_breadcrumbs(prompt)
             return response
@@ -232,7 +232,8 @@ class CommandProcessor:
             reply = self.ai.query(prompt, **kwargs)
         except TypeError:
             reply = self.ai.query(prompt)
-        return sanitize_ai_reply(reply)
+        finish_reason = getattr(self.ai, "last_finish_reason", None)
+        return sanitize_ai_reply(reply, finish_reason=finish_reason)
 
     def prepare_query_request(
         self,
@@ -455,7 +456,8 @@ Source material:
                 reply = self.ai.query(prompt, **kwargs)
             except TypeError:
                 reply = self.ai.query(prompt)
-            reply = sanitize_ai_reply(reply)
+            finish_reason = getattr(self.ai, "last_finish_reason", None)
+            reply = sanitize_ai_reply(reply, finish_reason=finish_reason)
         except Exception as e:
             self.logger.error(f"DISTILL AI query failed: {e}")
             return

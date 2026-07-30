@@ -208,6 +208,12 @@ class AIInterface:
         log.info("AIAdapter initialized (provider=%s, model=%s, base_url=%s)", provider_key, model, base_url)
         return client
 
+    @property
+    def last_finish_reason(self) -> str | None:
+        if self._client is None:
+            return None
+        return self._client.last_finish_reason
+
     def _chat(self, prompt_or_messages, **kwargs):
         if self._client is None:
             raise RuntimeError("AI client is not initialized")
