@@ -62,6 +62,7 @@ from PySide6.QtWidgets import (
     QWidget,
     QVBoxLayout,
     QHBoxLayout,
+    QFrame,
     QLineEdit,
     QPushButton,
     QTextEdit,
@@ -75,7 +76,7 @@ from PySide6.QtWidgets import (
     QMessageBox,
     QSizePolicy,
     QCheckBox,
-    QTabWidget,
+    QStackedWidget,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from bs4 import BeautifulSoup  # for OPML export parsing
@@ -128,10 +129,172 @@ GMAIL_JANITOR_SCRIPT = Path(
     os.getenv("GMAIL_JANITOR_SCRIPT", str(APP_DIR / "gmail_janitor.py"))
 ).expanduser()
 
+APP_CHROME_STYLESHEET = """
+QWidget {
+    background: #f3efe6;
+    color: #251d13;
+    font-size: 13px;
+}
+QFrame#productSidebar {
+    background: #d9d2c3;
+    border-right: 1px solid #9f947e;
+}
+QWidget#workspacePane {
+    background: #fbf8f1;
+    border: 1px solid #cbbda8;
+    border-radius: 10px;
+}
+QLabel#productSidebarBrand {
+    color: #30281d;
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    padding: 4px 2px 10px 2px;
+}
+QLabel#productSidebarHint {
+    color: #665845;
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    padding: 0 2px 8px 2px;
+}
+QPushButton#productSidebarButton {
+    text-align: left;
+    padding: 12px 14px;
+    border: 1px solid #8a7c65;
+    border-radius: 0;
+    background: #efe8d9;
+    color: #241d14;
+    font-size: 14px;
+    font-weight: 600;
+}
+QPushButton#productSidebarButton:hover {
+    background: #f8f2e5;
+}
+QPushButton#productSidebarButton:checked {
+    background: #fffaf0;
+    border-right: 4px solid #2f5da8;
+    padding-right: 11px;
+}
+QLabel#sectionTitle {
+    color: #183a5a;
+    font-size: 15px;
+    font-weight: 700;
+    padding: 0;
+}
+QLabel#sectionSubtitle {
+    color: #786a59;
+    font-size: 11px;
+    padding: 0 0 6px 0;
+}
+QWidget#toolbarSurface {
+    background: #183a5a;
+    color: white;
+    border: 1px solid #274c71;
+    border-radius: 10px 10px 0 0;
+}
+QWidget#statusSurface {
+    background: #183a5a;
+    border: 1px solid #274c71;
+    border-top: 0;
+    border-radius: 0 0 10px 10px;
+}
+QLabel#statusLabel {
+    color: #e6f1ff;
+    padding: 4px 8px;
+}
+QLineEdit,
+QComboBox,
+QTextEdit,
+QListWidget,
+QTreeWidget {
+    background: #fffdf8;
+    border: 1px solid #cabda9;
+    border-radius: 8px;
+    color: #241d14;
+    selection-background-color: #2f5da8;
+    selection-color: white;
+}
+QTextEdit,
+QListWidget,
+QTreeWidget {
+    alternate-background-color: #f6f0e4;
+}
+QComboBox,
+QLineEdit {
+    padding: 6px 8px;
+}
+QPushButton[buttonRole="nav"] {
+    background: #214d74;
+    color: #ffffff;
+    border: 1px solid #9ec3e2;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+}
+QPushButton[buttonRole="primary"] {
+    background: #2f5da8;
+    color: #ffffff;
+    border: 1px solid #234884;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+}
+QPushButton[buttonRole="secondary"] {
+    background: #e8decb;
+    color: #241d14;
+    border: 1px solid #bcae96;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+}
+QPushButton[buttonRole="danger"] {
+    background: #874f2d;
+    color: #ffffff;
+    border: 1px solid #6c3e21;
+    border-radius: 8px;
+    padding: 6px 10px;
+    font-weight: 600;
+}
+QPushButton:hover {
+    filter: brightness(1.04);
+}
+QSplitter::handle {
+    background: #d7cbb7;
+    width: 6px;
+    height: 6px;
+}
+QSplitter::handle:hover {
+    background: #c3b396;
+}
+"""
+
+VPN_UI_SUPPORTED = sys.platform.startswith("linux")
+
 
 # ---------------------------------------------------------------------------
 # Archive DB helpers (archive_pages)
 # ---------------------------------------------------------------------------
+
+
+def _set_button_role(button: QPushButton, role: str) -> None:
+    button.setProperty("buttonRole", role)
+
+
+def _set_section_title(label: QLabel, subtitle: str | None = None) -> QLabel:
+    label.setObjectName("sectionTitle")
+    if subtitle is not None:
+        label.setToolTip(subtitle)
+    return label
+
+
+def _make_section_subtitle(text: str) -> QLabel:
+    label = QLabel(text)
+    label.setObjectName("sectionSubtitle")
+    label.setWordWrap(True)
+    return label
 
 
 def ensure_archive_table(db_path: Path):
@@ -533,7 +696,7 @@ class WebMCPRelayAdapter:
                 "params": {
                     "protocolVersion": "2024-11-05",
                     "capabilities": {},
-                    "clientInfo": {"name": "ai_navigator", "version": "0.1.0"},
+                    "clientInfo": {"name": "ai_navigator", "version": "0.2.0"},
                 },
             },
             {
@@ -933,99 +1096,100 @@ class BrowserPane(QWidget):
 
         self.view = QWebEngineView()
         self._pending_webmcp_execution = None
+        self.setObjectName("workspacePane")
 
         self.url_bar = QLineEdit()
+        self.url_bar.setPlaceholderText("Enter a URL or host name")
+        self.url_bar.setMinimumWidth(420)
         self.go_button = QPushButton("Go")
-        self.back_button = QPushButton("←")
-        self.fwd_button = QPushButton("→")
+        self.back_button = QPushButton("Back")
+        self.fwd_button = QPushButton("Forward")
         self.reload_button = QPushButton("Reload")
         self.home_button = QPushButton("Home")
         self.archive_button = QPushButton("Archive")
-        self.opml_button = QPushButton("Outline (OPML export)")
-        self.browser_focus_button = QPushButton("Browser Full")
+        self.opml_button = QPushButton("Export Outline")
+        self.browser_focus_button = QPushButton("Focus Browser")
         self.throbber = ThrobberWidget(size=24)
 
         # --- VPN UI ---
         self.vpn = VPNController()
         self.require_vpn = False
-        self.vpn_button = QPushButton("VPN")
-        self.vpn_button.setCheckable(True)
-        self.vpn_status = QLabel("●")
+        self.vpn_button = None
+        self.vpn_status = None
+        if VPN_UI_SUPPORTED:
+            self.vpn_button = QPushButton("VPN")
+            self.vpn_button.setCheckable(True)
+            self.vpn_status = QLabel("●")
 
         self.status_label = QLabel("Ready.")
-        self.status_label.setStyleSheet(
-            "font-size: 11px; color: #d0e8ff; background-color: #003c5a; padding: 2px;"
-        )
+        self.status_label.setObjectName("statusLabel")
         self.status_label.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
 
-        toolbar_row = QHBoxLayout()
+        toolbar_layout = QVBoxLayout()
+        toolbar_layout.setContentsMargins(10, 8, 10, 8)
+        toolbar_layout.setSpacing(8)
+        nav_row = QHBoxLayout()
+        nav_row.setContentsMargins(0, 0, 0, 0)
+        nav_row.setSpacing(8)
+        utility_row = QHBoxLayout()
+        utility_row.setContentsMargins(0, 0, 0, 0)
+        utility_row.setSpacing(8)
         toolbar_bg = QWidget()
-        toolbar_bg.setStyleSheet(
-            "background-color: #003c5a; color: white; border-bottom: 1px solid #99ccee;"
-        )
-        toolbar_bg.setLayout(toolbar_row)
-
-        btn_style = (
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #0f3b52;"
-            "}"
-        )
+        toolbar_bg.setObjectName("toolbarSurface")
+        toolbar_bg.setLayout(toolbar_layout)
         for b in (
             self.back_button,
             self.fwd_button,
             self.reload_button,
             self.home_button,
             self.go_button,
+        ):
+            _set_button_role(b, "nav")
+        for b in (
             self.archive_button,
             self.opml_button,
             self.browser_focus_button,
-            self.vpn_button,
         ):
-            b.setStyleSheet(btn_style)
+            _set_button_role(b, "secondary")
+        if self.vpn_button is not None:
+            _set_button_role(self.vpn_button, "secondary")
+        if self.vpn_status is not None:
+            self.vpn_status.setStyleSheet("color: red; padding-left:6px;")
 
-        self.vpn_status.setStyleSheet("color: red; padding-left:6px;")
+        brand_label = QLabel("AI Navigator", parent=toolbar_bg)
+        brand_label.setObjectName("sectionTitle")
 
-        self.url_bar.setStyleSheet(
-            "QLineEdit {"
-            "  background-color: #dfefff;"
-            "  color: #000000;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 2px 4px;"
-            "}"
-        )
+        nav_row.addWidget(brand_label)
+        nav_row.addWidget(self.back_button)
+        nav_row.addWidget(self.fwd_button)
+        nav_row.addWidget(self.reload_button)
+        nav_row.addWidget(self.home_button)
+        nav_row.addWidget(QLabel("Address", parent=toolbar_bg))
+        nav_row.addWidget(self.url_bar, stretch=1)
+        nav_row.addWidget(self.go_button)
 
-        toolbar_row.addWidget(QLabel("AI Navigator", parent=toolbar_bg))
-        toolbar_row.addWidget(self.back_button)
-        toolbar_row.addWidget(self.fwd_button)
-        toolbar_row.addWidget(self.reload_button)
-        toolbar_row.addWidget(self.home_button)
-        toolbar_row.addWidget(QLabel("URL:", parent=toolbar_bg))
-        toolbar_row.addWidget(self.url_bar, stretch=1)
-        toolbar_row.addWidget(self.go_button)
-        toolbar_row.addWidget(self.archive_button)
-        toolbar_row.addWidget(self.opml_button)
-        toolbar_row.addWidget(self.browser_focus_button)
-        toolbar_row.addWidget(self.vpn_button)
-        toolbar_row.addWidget(self.vpn_status)
-        toolbar_row.addWidget(self.throbber)
+        utility_row.addWidget(self.archive_button)
+        utility_row.addWidget(self.opml_button)
+        utility_row.addWidget(self.browser_focus_button)
+        utility_row.addStretch(1)
+        if self.vpn_button is not None:
+            utility_row.addWidget(self.vpn_button)
+        if self.vpn_status is not None:
+            utility_row.addWidget(self.vpn_status)
+        utility_row.addWidget(self.throbber)
+        toolbar_layout.addLayout(nav_row)
+        toolbar_layout.addLayout(utility_row)
 
         status_row = QHBoxLayout()
+        status_row.setContentsMargins(6, 4, 6, 6)
         status_bg = QWidget()
-        status_bg.setStyleSheet(
-            "background-color: #003c5a; border-top: 1px solid #99ccee;"
-        )
+        status_bg.setObjectName("statusSurface")
         status_bg.setLayout(status_row)
         status_row.addWidget(self.status_label)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(0)
         layout.addWidget(toolbar_bg)
         layout.addWidget(self.view, stretch=1)
         layout.addWidget(status_bg)
@@ -1046,19 +1210,23 @@ class BrowserPane(QWidget):
         self.view.loadProgress.connect(self._on_load_progress)
         self.view.loadFinished.connect(self._on_load_finished)
 
-        self.vpn_button.toggled.connect(self._toggle_vpn)
-        self.vpn_timer = QTimer(self)
-        self.vpn_timer.timeout.connect(self._refresh_vpn_status)
-        self.vpn_timer.start(1500)
+        self.vpn_timer = None
+        if self.vpn_button is not None:
+            self.vpn_button.toggled.connect(self._toggle_vpn)
+            self.vpn_timer = QTimer(self)
+            self.vpn_timer.timeout.connect(self._refresh_vpn_status)
+            self.vpn_timer.start(1500)
 
         self.url_bar.setText(self.home_url)
         self.load_url()
 
     def set_browser_focus_active(self, active: bool):
-        self.browser_focus_button.setText("Restore Panes" if active else "Browser Full")
+        self.browser_focus_button.setText("Restore Layout" if active else "Focus Browser")
 
     # VPN helpers
     def _toggle_vpn(self, checked: bool):
+        if not VPN_UI_SUPPORTED:
+            return
         self.require_vpn = checked
         if checked:
             threading.Thread(target=self._bring_vpn_up, daemon=True).start()
@@ -1067,11 +1235,15 @@ class BrowserPane(QWidget):
             self._refresh_vpn_status()
 
     def _bring_vpn_up(self):
+        if not VPN_UI_SUPPORTED:
+            return
         ok = self.vpn.ensure_connected(timeout_s=25)
         self.status_label.setText("VPN connected" if ok else "VPN connection failed")
         self._refresh_vpn_status()
 
     def _refresh_vpn_status(self):
+        if self.vpn_status is None:
+            return
         active = self.vpn.is_active()
         has_tun = self.vpn.has_tun()
         color = "green" if (active and has_tun) else ("orange" if active else "red")
@@ -1323,49 +1495,40 @@ class ResultsPane(QWidget):
 
     def __init__(self, db_path: Path):
         super().__init__()
+        self.setObjectName("workspacePane")
 
         self.db_path = db_path
         self.conn = None
 
         self.archive_list = QListWidget()
+        self.archive_list.setAlternatingRowColors(True)
         self.details_list = QListWidget()
+        self.details_list.setAlternatingRowColors(True)
 
         self.recover_button = QPushButton("Recover")
         self.recover_chat_button = QPushButton("Recover to ChatGPT")
         self.recover_weave_button = QPushButton("Recover Memory Weave")
 
         header_label = QLabel("Archived Pages")
-        header_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; color: #ffffff; padding: 4px;"
+        _set_section_title(header_label)
+        subtitle_label = _make_section_subtitle(
+            "Recovered pages, snippets, and clipboard handoff tools."
         )
         details_label = QLabel("Details")
-        details_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; color: #ffffff; padding: 4px;"
-        )
-
-        btn_style = (
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #0f3b52;"
-            "}"
-        )
+        _set_section_title(details_label)
         for b in (
             self.recover_button,
             self.recover_chat_button,
             self.recover_weave_button,
         ):
-            b.setStyleSheet(btn_style)
+            _set_button_role(b, "primary")
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
 
         layout.addWidget(header_label)
+        layout.addWidget(subtitle_label)
         layout.addWidget(self.archive_list, stretch=1)
 
         details_header_row = QHBoxLayout()
@@ -1777,6 +1940,7 @@ class OutlinePane(QWidget):
         self, db_path: Path, on_open_local=None, opml_path: str = DEFAULT_OPML_PATH
     ):
         super().__init__()
+        self.setObjectName("workspacePane")
 
         self.db_path = db_path
         self.on_open_local = on_open_local
@@ -1784,25 +1948,13 @@ class OutlinePane(QWidget):
 
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
+        self.tree.setAlternatingRowColors(True)
 
         self.reload_button = QPushButton("Reload")
-        self.reload_button.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed {"
-            "  background-color: #0f3b52;"
-            "}"
-        )
+        _set_button_role(self.reload_button, "secondary")
 
         header_label = QLabel("Outline (OPML export)")
-        header_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; color: #ffffff; padding: 4px;"
-        )
+        _set_section_title(header_label)
 
         header_row = QHBoxLayout()
         header_row.addWidget(header_label)
@@ -1810,7 +1962,8 @@ class OutlinePane(QWidget):
         header_row.addWidget(self.reload_button)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         layout.addLayout(header_row)
         layout.addWidget(self.tree, stretch=1)
         self.setLayout(layout)
@@ -1881,34 +2034,24 @@ class MemoryPane(QWidget):
 
     def __init__(self, db_path: Path):
         super().__init__()
+        self.setObjectName("workspacePane")
         self.db_path = db_path
 
         # Header
         header_label = QLabel("Memory Tree")
-        header_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; "
-            "color: #ffffff; padding: 4px;"
+        _set_section_title(header_label)
+        subtitle_label = _make_section_subtitle(
+            "Recent sessions grouped by hour, domain, then page."
         )
 
         # Tree widget
         self.tree = QTreeWidget()
         self.tree.setHeaderHidden(True)
-        self.tree.setStyleSheet(
-            "background-color: #1e1e1e; color: #c0ffc0; " "font-family: monospace;"
-        )
+        self.tree.setAlternatingRowColors(True)
 
         # Refresh button
         self.refresh_button = QPushButton("Refresh")
-        self.refresh_button.setStyleSheet(
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed { background-color: #0f3b52; }"
-        )
+        _set_button_role(self.refresh_button, "secondary")
 
         # Layout
         header_row = QHBoxLayout()
@@ -1917,8 +2060,10 @@ class MemoryPane(QWidget):
         header_row.addWidget(self.refresh_button)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         layout.addLayout(header_row)
+        layout.addWidget(subtitle_label)
         layout.addWidget(self.tree, stretch=1)
         self.setLayout(layout)
 
@@ -1995,13 +2140,15 @@ class GmailPane(QWidget):
 
     def __init__(self, janitor_script: Path = GMAIL_JANITOR_SCRIPT, browser_pane=None):
         super().__init__()
+        self.setObjectName("workspacePane")
         self.janitor_script = Path(janitor_script).expanduser()
         self.browser_pane = browser_pane
         self._running = False
 
         header_label = QLabel("Gmail Janitor")
-        header_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; color: #ffffff; padding: 4px;"
+        _set_section_title(header_label)
+        subtitle_label = _make_section_subtitle(
+            "Dry-run mailbox cleanup first, then confirm live changes."
         )
 
         self.query_edit = QLineEdit()
@@ -2049,34 +2196,14 @@ class GmailPane(QWidget):
         self.status_label = QLabel(f"Script: {self.janitor_script}")
         self.status_label.setWordWrap(True)
 
-        btn_style = (
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed { background-color: #0f3b52; }"
-        )
-        caution_style = (
-            "QPushButton {"
-            "  background-color: #7e3d19;"
-            "  color: #ffffff;"
-            "  border: 1px solid #ffd0aa;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed { background-color: #52260f; }"
-        )
         for button in (
             self.use_current_button,
             self.dry_archive_button,
             self.dry_spam_trash_button,
         ):
-            button.setStyleSheet(btn_style)
+            _set_button_role(button, "secondary")
         for button in (self.live_archive_button, self.live_spam_trash_button):
-            button.setStyleSheet(caution_style)
+            _set_button_role(button, "danger")
 
         top_row = QHBoxLayout()
         top_row.addWidget(header_label)
@@ -2104,8 +2231,10 @@ class GmailPane(QWidget):
         button_row.addWidget(self.live_spam_trash_button)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         layout.addLayout(top_row)
+        layout.addWidget(subtitle_label)
         layout.addLayout(query_row)
         layout.addLayout(target_row)
         layout.addLayout(option_row)
@@ -2476,6 +2605,7 @@ class GmailPane(QWidget):
 class WebMCPActionsPane(QWidget):
     def __init__(self, browser_pane: BrowserPane):
         super().__init__()
+        self.setObjectName("workspacePane")
         self.browser_pane = browser_pane
         self.adapter = WebMCPRelayAdapter()
         self.actions = []
@@ -2483,21 +2613,26 @@ class WebMCPActionsPane(QWidget):
         self.last_payload = None
 
         header_label = QLabel("WebMCP Actions")
-        header_label.setStyleSheet(
-            "font-weight: bold; background-color: #003c5a; color: #ffffff; padding: 4px;"
+        _set_section_title(header_label)
+        subtitle_label = _make_section_subtitle(
+            "Mine actions from the current page first. If none are embedded, fall back to the relay catalog."
         )
 
         self.source_combo = QComboBox()
         self.source_combo.addItem("Relay server (stdio)", "stdio")
         self.source_combo.addItem("Flask relay client", "flask")
 
-        self.refresh_button = QPushButton("Refresh")
-        self.inspect_button = QPushButton("Inspect")
-        self.execute_button = QPushButton("Execute In View")
+        self.refresh_button = QPushButton("Refresh Actions")
+        self.inspect_button = QPushButton("Preview Payload")
+        self.execute_button = QPushButton("Run In Browser")
         self.status_label = QLabel("Ready.")
         self.status_label.setWordWrap(True)
 
         self.actions_list = QListWidget()
+        self.actions_list.setAlternatingRowColors(True)
+        self.actions_list.setToolTip(
+            "Select an action to inspect its parameters and generated payload."
+        )
         self.param_value = QComboBox()
         self.param_value.setEditable(True)
         self.param_value.setInsertPolicy(QComboBox.NoInsert)
@@ -2506,19 +2641,9 @@ class WebMCPActionsPane(QWidget):
 
         self.payload_view = QTextEdit()
         self.payload_view.setReadOnly(True)
-
-        btn_style = (
-            "QPushButton {"
-            "  background-color: #195b7e;"
-            "  color: #ffffff;"
-            "  border: 1px solid #99ccee;"
-            "  padding: 3px 6px;"
-            "  font-weight: bold;"
-            "}"
-            "QPushButton:pressed { background-color: #0f3b52; }"
-        )
-        for button in (self.refresh_button, self.inspect_button, self.execute_button):
-            button.setStyleSheet(btn_style)
+        _set_button_role(self.refresh_button, "secondary")
+        _set_button_role(self.inspect_button, "secondary")
+        _set_button_role(self.execute_button, "primary")
 
         top_row = QHBoxLayout()
         top_row.addWidget(header_label)
@@ -2533,8 +2658,10 @@ class WebMCPActionsPane(QWidget):
         call_row.addWidget(self.execute_button)
 
         layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
+        layout.setContentsMargins(12, 12, 12, 12)
+        layout.setSpacing(8)
         layout.addLayout(top_row)
+        layout.addWidget(subtitle_label)
         layout.addWidget(self.actions_list, stretch=1)
         layout.addLayout(call_row)
         layout.addWidget(self.payload_view, stretch=2)
@@ -2802,16 +2929,64 @@ class MainWindow(QWidget):
         self.browser_focus_shortcut = QShortcut(QKeySequence("Ctrl+Shift+B"), self)
         self.browser_focus_shortcut.activated.connect(self._toggle_browser_focus)
 
+        self.menu_bar_row = QWidget()
+        self.menu_bar_row.setObjectName("toolbarSurface")
+        menu_row_layout = QHBoxLayout()
+        menu_row_layout.setContentsMargins(10, 8, 10, 8)
+        menu_row_layout.setSpacing(8)
+        self.menu_bar_row.setLayout(menu_row_layout)
+
+        menu_label = QLabel("Suite Menu")
+        menu_label.setObjectName("sectionTitle")
+        menu_row_layout.addWidget(menu_label)
+
+        self.browser_menu_button = QPushButton("Browser")
+        self.archive_menu_button = QPushButton("Archive")
+        self.memory_menu_button = QPushButton("Memory")
+        self.gmail_menu_button = QPushButton("Gmail")
+        self.webmcp_menu_button = QPushButton("WebMCP")
+        self.restore_menu_button = QPushButton("All Panes")
+
+        for button in (
+            self.browser_menu_button,
+            self.archive_menu_button,
+            self.memory_menu_button,
+            self.gmail_menu_button,
+            self.webmcp_menu_button,
+            self.restore_menu_button,
+        ):
+            _set_button_role(button, "secondary")
+            menu_row_layout.addWidget(button)
+
+        menu_row_layout.addStretch(1)
+
+        self.browser_menu_button.clicked.connect(self._expand_browser_focus)
+        self.archive_menu_button.clicked.connect(lambda: self._focus_side_pane(0))
+        self.memory_menu_button.clicked.connect(lambda: self._focus_side_pane(1))
+        self.gmail_menu_button.clicked.connect(lambda: self._focus_side_pane(2))
+        self.webmcp_menu_button.clicked.connect(lambda: self._focus_side_pane(3))
+        self.restore_menu_button.clicked.connect(self._restore_default_layout)
+
         main_layout = QVBoxLayout()
-        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.setContentsMargins(12, 12, 12, 12)
+        main_layout.setSpacing(12)
+        main_layout.addWidget(self.menu_bar_row)
         main_layout.addWidget(self.outer_splitter)
         self.setLayout(main_layout)
+        self.outer_splitter.setHandleWidth(8)
+        self.mid_splitter.setHandleWidth(8)
 
     def _toggle_browser_focus(self):
         if self._browser_focus_active:
             self._restore_browser_focus()
         else:
             self._expand_browser_focus()
+
+    def _restore_default_layout(self):
+        if self._browser_focus_active:
+            self._restore_browser_focus()
+        self.outer_splitter.setSizes([900, 700])
+        self.mid_splitter.setSizes([300, 320, 360, 420])
 
     def _expand_browser_focus(self):
         if self._browser_focus_active:
@@ -2841,6 +3016,20 @@ class MainWindow(QWidget):
         self._saved_outer_splitter_sizes = None
         self._saved_mid_splitter_sizes = None
         self.browser_pane.set_browser_focus_active(False)
+
+    def _focus_side_pane(self, pane_index: int):
+        if self._browser_focus_active:
+            self._restore_browser_focus()
+
+        outer_width = max(self.outer_splitter.width(), 1)
+        browser_width = max(int(outer_width * 0.48), 520)
+        side_width = max(outer_width - browser_width, 420)
+        self.outer_splitter.setSizes([browser_width, side_width])
+
+        sizes = [180] * self.mid_splitter.count()
+        if 0 <= pane_index < len(sizes):
+            sizes[pane_index] = 720
+        self.mid_splitter.setSizes(sizes)
 
     def _handle_page_loaded(self, url_str: str):
         # Hook point for future auto-archive/diff logic.
@@ -2894,6 +3083,7 @@ class ProductLauncherPane(QWidget):
 
     def __init__(self, title: str, description: str, root_path: Path, venv_name: str):
         super().__init__()
+        self.setObjectName("workspacePane")
         self.title = title
         self.root_path = root_path
         self.venv_name = venv_name
@@ -2904,7 +3094,7 @@ class ProductLauncherPane(QWidget):
         layout.setSpacing(16)
 
         title_label = QLabel(title)
-        title_label.setStyleSheet("font-size: 24px; font-weight: 600;")
+        title_label.setObjectName("sectionTitle")
 
         body_label = QLabel(
             f"{description}\n\n"
@@ -2922,6 +3112,7 @@ class ProductLauncherPane(QWidget):
         self.status_label.setWordWrap(True)
 
         self.launch_button = QPushButton(f"Launch {title}")
+        _set_button_role(self.launch_button, "primary")
         self.launch_button.clicked.connect(self.launch_product)
 
         self.output_view = QTextEdit()
@@ -3016,35 +3207,79 @@ class SuiteShell(QWidget):
 
         self.setWindowTitle("AI Dream Communicator")
         self.setMinimumSize(QSize(1800, 900))
+        self.product_stack = QStackedWidget()
+        self.product_buttons: list[QPushButton] = []
 
-        self.product_tabs = QTabWidget()
-        self.product_tabs.setDocumentMode(True)
+        shell_layout = QHBoxLayout()
+        shell_layout.setContentsMargins(0, 0, 0, 0)
+        shell_layout.setSpacing(0)
+
+        sidebar = QFrame()
+        sidebar.setObjectName("productSidebar")
+        sidebar.setFixedWidth(220)
+        sidebar_layout = QVBoxLayout()
+        sidebar_layout.setContentsMargins(16, 18, 16, 18)
+        sidebar_layout.setSpacing(10)
+
+        brand_label = QLabel("Communicator")
+        brand_label.setObjectName("productSidebarBrand")
+        brand_label.setWordWrap(True)
+        sidebar_layout.addWidget(brand_label)
+
+        hint_label = QLabel("Products")
+        hint_label.setObjectName("productSidebarHint")
+        sidebar_layout.addWidget(hint_label)
 
         self.ai_navigator = MainWindow()
-        self.product_tabs.addTab(self.ai_navigator, "AI Navigator")
-        self.product_tabs.addTab(
+        self._add_product_button("AI Navigator", self.ai_navigator, sidebar_layout)
+        self._add_product_button(
+            "PiKit",
             ProductLauncherPane(
                 "PiKit",
                 "OPML / knowledge organization mode.",
                 PIKIT_ROOT,
                 "pikit",
             ),
-            "PiKit",
+            sidebar_layout,
         )
-        self.product_tabs.addTab(
+        self._add_product_button(
+            "FunKit",
             ProductLauncherPane(
                 "FunKit",
                 "AI query / LLM interaction mode.",
                 FUNKIT_ROOT,
                 "funkit",
             ),
-            "FunKit",
+            sidebar_layout,
         )
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(0, 0, 0, 0)
-        layout.addWidget(self.product_tabs)
-        self.setLayout(layout)
+        sidebar_layout.addStretch(1)
+        sidebar.setLayout(sidebar_layout)
+        shell_layout.addWidget(sidebar)
+        shell_layout.addWidget(self.product_stack, 1)
+        self.setLayout(shell_layout)
+
+        self._apply_shell_styles()
+        self._select_product(0)
+
+    def _add_product_button(
+        self, label: str, widget: QWidget, sidebar_layout: QVBoxLayout
+    ) -> None:
+        index = self.product_stack.addWidget(widget)
+        button = QPushButton(label)
+        button.setCheckable(True)
+        button.setObjectName("productSidebarButton")
+        button.clicked.connect(lambda checked=False, i=index: self._select_product(i))
+        self.product_buttons.append(button)
+        sidebar_layout.addWidget(button)
+
+    def _select_product(self, index: int) -> None:
+        self.product_stack.setCurrentIndex(index)
+        for idx, button in enumerate(self.product_buttons):
+            button.setChecked(idx == index)
+
+    def _apply_shell_styles(self) -> None:
+        self.setStyleSheet(APP_CHROME_STYLESHEET)
 
 
 # ---------------------------------------------------------------------------
