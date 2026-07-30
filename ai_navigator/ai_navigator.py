@@ -3232,7 +3232,109 @@ class ProductLauncherPane(QWidget):
     def _required_env_keys(self) -> list[str]:
         if self.title == "PiKit":
             return ["BASETEN_API_KEY"]
+        if self.title == "FunKit":
+            try:
+                providers_path = self.root_path / "storage" / "providers.json"
+                app_state_path = self.root_path / "storage" / "app_state.json"
+                if providers_path.exists():
+                    providers_data = json.loads(
+                        providers_path.read_text(encoding="utf-8")
+                    )
+                    selected_provider = providers_data.get("default")
+                    if app_state_path.exists():
+                        app_state = json.loads(
+                            app_state_path.read_text(encoding="utf-8")
+                        )
+                        selected_provider = (
+                            app_state.get("selected_provider") or selected_provider
+                        )
+                    for provider in providers_data.get("providers", []):
+                        if provider.get("key") == selected_provider:
+                            env_key = str(provider.get("env_key") or "").strip()
+                            return [env_key] if env_key else []
+            except Exception:
+                pass
         return []
+
+    def _ensure_runtime_dependencies(self, python_exe: Path) -> bool:
+        if self.title != "FunKit":
+            return True
+
+        try:
+            probe = subprocess.run(
+                [str(python_exe), "-c", "import PIL"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=15,
+                cwd=str(self.root_path),
+            )
+        except Exception as exc:
+            QMessageBox.warning(
+                self,
+                "FunKit Setup",
+                f"Could not verify FunKit dependencies.\n\n{exc}",
+            )
+            return False
+
+        if probe.returncode == 0:
+            return True
+
+        choice = QMessageBox.question(
+            self,
+            "FunKit Needs Pillow",
+            "FunKit could not start because the selected environment is missing "
+            "`PIL` (the Pillow package).\n\n"
+            f"Interpreter: {python_exe}\n\n"
+            "Install Pillow into this environment now and continue launching FunKit?",
+            QMessageBox.Yes | QMessageBox.No,
+            QMessageBox.Yes,
+        )
+        if choice != QMessageBox.Yes:
+            self.status_label.setText("FunKit launch canceled: Pillow not installed.")
+            self.output_view.append(
+                "FunKit requires Pillow (`PIL`). Launch canceled by user."
+            )
+            return False
+
+        self.status_label.setText("Installing Pillow for FunKit…")
+        self.output_view.append(
+            f"Installing Pillow into {python_exe.parent.parent} ..."
+        )
+        try:
+            install = subprocess.run(
+                [str(python_exe), "-m", "pip", "install", "Pillow"],
+                stdout=subprocess.PIPE,
+                stderr=subprocess.STDOUT,
+                text=True,
+                timeout=180,
+                cwd=str(self.root_path),
+            )
+        except Exception as exc:
+            QMessageBox.critical(
+                self,
+                "FunKit Setup",
+                f"Failed to install Pillow.\n\n{exc}",
+            )
+            self.status_label.setText("FunKit launch failed: Pillow install error.")
+            return False
+
+        output = (install.stdout or "").strip()
+        if output:
+            self.output_view.append(output)
+
+        if install.returncode != 0:
+            QMessageBox.critical(
+                self,
+                "FunKit Setup",
+                "Pillow installation failed.\n\n"
+                f"Exit status: {install.returncode}",
+            )
+            self.status_label.setText("FunKit launch failed: Pillow install failed.")
+            return False
+
+        self.status_label.setText("Pillow installed. Continuing FunKit launch…")
+        return True
 
     def _ensure_launch_environment(self) -> QProcessEnvironment | None:
         env = QProcessEnvironment.systemEnvironment()
@@ -3279,6 +3381,9 @@ class ProductLauncherPane(QWidget):
         python_exe = self._python_executable()
         if not python_exe.exists():
             self.status_label.setText(f"Missing Python executable: {python_exe}")
+            return
+
+        if not self._ensure_runtime_dependencies(python_exe):
             return
 
         launch_env = self._ensure_launch_environment()
