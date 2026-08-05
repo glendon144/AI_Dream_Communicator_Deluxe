@@ -84,12 +84,6 @@ from PySide6.QtWidgets import (
     QFileDialog,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEnginePage
-
-try:
-    from PySide6.QtWebEngineCore import QWebEnginePermission
-except ImportError:
-    QWebEnginePermission = None
 from bs4 import BeautifulSoup  # for OPML export parsing
 
 # Initializes storage/ and ensures archive_pages exists (same schema used below).
@@ -1171,18 +1165,6 @@ class ThrobberWidget(QWidget):
 # ---------------------------------------------------------------------------
 
 
-class DiagnosticWebEnginePage(QWebEnginePage):
-    """Mirror Chromium JavaScript console messages to the launching Terminal."""
-
-    def javaScriptConsoleMessage(self, level, message, line_number, source_id):
-        print(
-            f"[web-console] level={level} source={source_id}:{line_number} {message}",
-            file=sys.stderr,
-            flush=True,
-        )
-        super().javaScriptConsoleMessage(level, message, line_number, source_id)
-
-
 class BrowserPane(QWidget):
     """
     Left pane:
@@ -1205,9 +1187,7 @@ class BrowserPane(QWidget):
         self.on_memory_log = on_memory_log
 
         self.view = QWebEngineView()
-        self.view.setPage(DiagnosticWebEnginePage(self.view))
         self._pending_webmcp_execution = None
-        self._media_permission_api = "none"
         self.setObjectName("workspacePane")
 
         self.url_bar = QLineEdit()
@@ -1221,7 +1201,6 @@ class BrowserPane(QWidget):
         self.archive_button = QPushButton("Archive")
         self.opml_button = QPushButton("Export Outline")
         self.browser_focus_button = QPushButton("Focus Browser")
-        self.mic_test_button = QPushButton("Test Microphone")
         self.throbber = ThrobberWidget(size=24)
 
         # --- VPN UI ---
@@ -1262,7 +1241,6 @@ class BrowserPane(QWidget):
             self.archive_button,
             self.opml_button,
             self.browser_focus_button,
-            self.mic_test_button,
         ):
             _set_button_role(b, "secondary")
         if self.vpn_button is not None:
@@ -1285,7 +1263,6 @@ class BrowserPane(QWidget):
         utility_row.addWidget(self.archive_button)
         utility_row.addWidget(self.opml_button)
         utility_row.addWidget(self.browser_focus_button)
-        utility_row.addWidget(self.mic_test_button)
         utility_row.addStretch(1)
         if self.vpn_button is not None:
             utility_row.addWidget(self.vpn_button)
@@ -1320,9 +1297,7 @@ class BrowserPane(QWidget):
         self.archive_button.clicked.connect(self._archive_current_page)
         self.opml_button.clicked.connect(self._export_outline_opml)
         self.browser_focus_button.clicked.connect(self.browserFocusRequested.emit)
-        self.mic_test_button.clicked.connect(self._run_microphone_diagnostics)
 
-        self._install_media_permission_handler()
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self._on_load_progress)
         self.view.loadFinished.connect(self._on_load_finished)
@@ -1339,176 +1314,6 @@ class BrowserPane(QWidget):
 
     def set_browser_focus_active(self, active: bool):
         self.browser_focus_button.setText("Restore Layout" if active else "Focus Browser")
-
-    def _install_media_permission_handler(self):
-        """Install the best microphone/camera permission API available."""
-        page = self.view.page()
-        if hasattr(page, "permissionRequested"):
-            page.permissionRequested.connect(self._on_permission_requested)
-            self._media_permission_api = "QWebEnginePermission (Qt 6.8+)"
-        elif hasattr(page, "featurePermissionRequested"):
-            page.featurePermissionRequested.connect(
-                self._on_legacy_feature_permission_requested
-            )
-            self._media_permission_api = "QWebEnginePage legacy feature API"
-        print(
-            f"[media] permission API: {self._media_permission_api}; "
-            f"platform={sys.platform}; executable={sys.executable}",
-            file=sys.stderr,
-            flush=True,
-        )
-
-    @staticmethod
-    def _permission_name(value) -> str:
-        return getattr(value, "name", str(value))
-
-    @staticmethod
-    def _trusted_media_origin(origin: str) -> bool:
-        host = (urlparse(origin).hostname or "").lower()
-        return (
-            host == "chatgpt.com"
-            or host.endswith(".chatgpt.com")
-            or host == "openai.com"
-            or host.endswith(".openai.com")
-            or host in {"localhost", "127.0.0.1", "::1"}
-        )
-
-    def _on_permission_requested(self, permission):
-        origin = permission.origin().toString()
-        permission_name = self._permission_name(permission.permissionType())
-        print(
-            f"[media] permission requested: origin={origin} type={permission_name} "
-            f"state={self._permission_name(permission.state())}",
-            file=sys.stderr,
-            flush=True,
-        )
-        media_names = {
-            "MediaAudioCapture",
-            "MediaVideoCapture",
-            "MediaAudioVideoCapture",
-        }
-        if permission_name not in media_names:
-            permission.deny()
-            return
-        trusted = self._trusted_media_origin(origin)
-        answer = QMessageBox.question(
-            self,
-            "Microphone / camera permission",
-            f"Allow {origin} to use {permission_name}?\n\n"
-            f"Qt permission API: {self._media_permission_api}",
-            QMessageBox.Yes | QMessageBox.No,
-            QMessageBox.Yes if trusted else QMessageBox.No,
-        )
-        if answer == QMessageBox.Yes:
-            permission.grant()
-            self.status_label.setText(f"Granted {permission_name} to {origin}")
-            print(f"[media] granted {permission_name} to {origin}", file=sys.stderr, flush=True)
-        else:
-            permission.deny()
-            self.status_label.setText(f"Denied {permission_name} to {origin}")
-            print(f"[media] denied {permission_name} to {origin}", file=sys.stderr, flush=True)
-
-    def _on_legacy_feature_permission_requested(self, security_origin, feature):
-        origin = security_origin.toString()
-        feature_name = self._permission_name(feature)
-        print(
-            f"[media] legacy permission requested: origin={origin} feature={feature_name}",
-            file=sys.stderr,
-            flush=True,
-        )
-        media_features = {
-            QWebEnginePage.MediaAudioCapture,
-            QWebEnginePage.MediaVideoCapture,
-            QWebEnginePage.MediaAudioVideoCapture,
-        }
-        if feature not in media_features:
-            policy = QWebEnginePage.PermissionDeniedByUser
-        else:
-            trusted = self._trusted_media_origin(origin)
-            answer = QMessageBox.question(
-                self,
-                "Microphone / camera permission",
-                f"Allow {origin} to use {feature_name}?",
-                QMessageBox.Yes | QMessageBox.No,
-                QMessageBox.Yes if trusted else QMessageBox.No,
-            )
-            policy = (
-                QWebEnginePage.PermissionGrantedByUser
-                if answer == QMessageBox.Yes
-                else QWebEnginePage.PermissionDeniedByUser
-            )
-        self.view.page().setFeaturePermission(security_origin, feature, policy)
-        print(f"[media] legacy decision: {feature_name} -> {policy}", file=sys.stderr, flush=True)
-
-    def _run_microphone_diagnostics(self):
-        """Exercise enumerateDevices/getUserMedia and show the exact result."""
-        script = r'''(async () => {
-  const report = {
-    href: location.href,
-    secureContext: window.isSecureContext,
-    userAgent: navigator.userAgent,
-    mediaDevicesPresent: !!navigator.mediaDevices,
-    getUserMediaPresent: !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia),
-    permissionState: null,
-    devicesBefore: [], devicesAfter: [], success: false,
-    errorName: null, errorMessage: null
-  };
-  try {
-    if (navigator.permissions && navigator.permissions.query) {
-      try {
-        const p = await navigator.permissions.query({name: 'microphone'});
-        report.permissionState = p.state;
-      } catch (e) {
-        report.permissionState = 'query-not-supported: ' + e.name;
-      }
-    }
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia)
-      throw new Error('navigator.mediaDevices.getUserMedia is unavailable');
-    report.devicesBefore = (await navigator.mediaDevices.enumerateDevices()).map(d => ({
-      kind: d.kind, label: d.label, deviceId: d.deviceId ? '[present]' : '[empty]'
-    }));
-    const stream = await navigator.mediaDevices.getUserMedia({audio: true, video: false});
-    report.success = true;
-    report.trackSettings = stream.getAudioTracks().map(t => ({
-      label: t.label, enabled: t.enabled, muted: t.muted,
-      readyState: t.readyState, settings: t.getSettings()
-    }));
-    report.devicesAfter = (await navigator.mediaDevices.enumerateDevices()).map(d => ({
-      kind: d.kind, label: d.label, deviceId: d.deviceId ? '[present]' : '[empty]'
-    }));
-    stream.getTracks().forEach(t => t.stop());
-  } catch (e) {
-    report.errorName = e && e.name ? e.name : 'Error';
-    report.errorMessage = e && e.message ? e.message : String(e);
-  }
-  console.log('[AI Navigator microphone diagnostic]', report);
-  return JSON.stringify(report, null, 2);
-})();'''
-        self.status_label.setText("Testing microphone access…")
-
-        def _show_report(result):
-            text = result if isinstance(result, str) else json.dumps(result, indent=2, default=str)
-            print(f"[media] diagnostic result:\n{text}", file=sys.stderr, flush=True)
-            try:
-                report = json.loads(text)
-            except Exception:
-                report = {}
-            success = bool(report.get("success"))
-            self.status_label.setText(
-                "Microphone test succeeded." if success else "Microphone test failed; see report."
-            )
-            box = QMessageBox(self)
-            box.setWindowTitle("Microphone diagnostic")
-            box.setIcon(QMessageBox.Information if success else QMessageBox.Warning)
-            box.setText(
-                "The browser opened and read an audio stream."
-                if success
-                else f"Microphone access failed: {report.get('errorName')}: {report.get('errorMessage')}"
-            )
-            box.setDetailedText(text)
-            box.exec()
-
-        self.view.page().runJavaScript(script, _show_report)
 
     # VPN helpers
     def _toggle_vpn(self, checked: bool):
@@ -3739,23 +3544,7 @@ class SuiteShell(QWidget):
 
 
 def main():
-    existing_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-    diagnostic_flags = "--no-sandbox --enable-logging=stderr --v=1"
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        f"{existing_flags} {diagnostic_flags}".strip()
-    )
-    os.environ.setdefault("QTWEBENGINE_REMOTE_DEBUGGING", "9222")
-    print(
-        "[media] Chromium flags=" + os.environ["QTWEBENGINE_CHROMIUM_FLAGS"],
-        file=sys.stderr,
-        flush=True,
-    )
-    print(
-        "[media] Remote DevTools: http://127.0.0.1:"
-        + os.environ["QTWEBENGINE_REMOTE_DEBUGGING"],
-        file=sys.stderr,
-        flush=True,
-    )
+    os.environ.setdefault("QTWEBENGINE_CHROMIUM_FLAGS", "--no-sandbox")
     app = QApplication(sys.argv)
     w = SuiteShell()
     w.show()

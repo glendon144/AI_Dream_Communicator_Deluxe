@@ -47,3 +47,9 @@ FunKit/src/
 logs/
 .cache/
 .pytest_cache/
+
+# TLS key material (never commit)
+PiKit/storage/*.key
+PiKit/storage/*.crt
+*.key
+*.pem
