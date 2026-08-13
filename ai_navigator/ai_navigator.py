@@ -98,6 +98,7 @@ from capture_store import (
     DreamCapture,
     build_handoff,
     ensure_capture_columns,
+    queue_pikit_handoff,
     save_capture,
 )
 
@@ -1829,7 +1830,7 @@ class ResultsPane(QWidget):
     """
 
     recoveredPage = Signal(str, str)  # html, url
-    handoffRequested = Signal(str, str)  # destination, clipboard packet
+    handoffRequested = Signal(str, str, str, int)  # destination, packet, title, id
 
     def __init__(self, db_path: Path):
         super().__init__()
@@ -1975,7 +1976,7 @@ class ResultsPane(QWidget):
         if not copy_to_clipboard(packet):
             QMessageBox.warning(self, "Clipboard problem", "Could not copy the capture.")
             return
-        self.handoffRequested.emit(destination, packet)
+        self.handoffRequested.emit(destination, packet, capture.title, capture.id)
 
     def _recover_selected(self):
         if self.conn is None:
@@ -3270,7 +3271,7 @@ class MainWindow(QWidget):
       BrowserPane | ResultsPane | MemoryPane | GmailPane | WebMCPActionsPane
     """
 
-    productHandoffRequested = Signal(str, str)
+    productHandoffRequested = Signal(str, str, str, int)
 
     def __init__(self):
         super().__init__()
@@ -3732,6 +3733,70 @@ class ProductLauncherPane(QWidget):
 
         self.status_label.setText(f"Launching {self.title} with {python_exe}")
 
+    def _environment_if_required_keys_present(self) -> QProcessEnvironment | None:
+        """Return a launch environment without prompting, or None if a key is absent."""
+        env = QProcessEnvironment.systemEnvironment()
+        for env_key in self._required_env_keys():
+            value = (os.environ.get(env_key) or "").strip()
+            if not value:
+                return None
+            env.insert(env_key, value)
+        return env
+
+    def accept_pikit_handoff(
+        self, *, packet: str, title: str, source_capture_id: int
+    ) -> bool:
+        """Queue a capture and launch PiKit automatically when its key is present."""
+        if self.title != "PiKit":
+            raise ValueError("PiKit handoffs require the PiKit launcher pane")
+        inbox_dir = self.root_path / "storage" / "handoffs"
+        queued_path = queue_pikit_handoff(
+            inbox_dir,
+            title=title,
+            body=packet,
+            source_capture_id=source_capture_id,
+        )
+        self.output_view.append(f"Queued Dream Capture: {queued_path.name}")
+
+        if self.process and self.process.state() != QProcess.NotRunning:
+            self.status_label.setText(
+                "Dream Capture queued. PiKit will open it momentarily."
+            )
+            return True
+
+        launch_env = self._environment_if_required_keys_present()
+        if launch_env is None:
+            required = ", ".join(self._required_env_keys())
+            self.status_label.setText(
+                f"Dream Capture queued. Automatic launch needs {required}; "
+                "use Launch PiKit to provide it."
+            )
+            return False
+
+        entrypoint = self.root_path / "main.py"
+        python_exe = self._python_executable()
+        if not entrypoint.exists() or not python_exe.exists():
+            self.status_label.setText(
+                "Dream Capture queued, but the PiKit entrypoint or Python is missing."
+            )
+            return False
+
+        self.output_view.clear()
+        self.process = QProcess(self)
+        self.process.setWorkingDirectory(str(self.root_path))
+        self.process.setProcessEnvironment(launch_env)
+        self.process.setProgram(str(python_exe))
+        self.process.setArguments([str(entrypoint)])
+        self.process.readyReadStandardOutput.connect(self._append_stdout)
+        self.process.readyReadStandardError.connect(self._append_stderr)
+        self.process.finished.connect(self._handle_finished)
+        self.process.errorOccurred.connect(self._handle_error)
+        self.process.start()
+        self.status_label.setText(
+            "Launching PiKit; the new Dream Capture will open automatically."
+        )
+        return True
+
     def _append_stdout(self):
         if self.process:
             text = bytes(self.process.readAllStandardOutput()).decode(
@@ -3846,14 +3911,23 @@ class SuiteShell(QWidget):
         for idx, button in enumerate(self.product_buttons):
             button.setChecked(idx == index)
 
-    def _handle_product_handoff(self, destination: str, packet: str) -> None:
+    def _handle_product_handoff(
+        self, destination: str, packet: str, title: str, source_capture_id: int
+    ) -> None:
         index = 1 if destination == "PiKit" else 2
         self._select_product(index)
         pane = self.product_stack.widget(index)
         if isinstance(pane, ProductLauncherPane):
-            pane.status_label.setText(
-                f"Dream Capture copied. Launch {destination}, then paste it to continue."
-            )
+            if destination == "PiKit":
+                pane.accept_pikit_handoff(
+                    packet=packet,
+                    title=title,
+                    source_capture_id=source_capture_id,
+                )
+            else:
+                pane.status_label.setText(
+                    f"Dream Capture copied. Launch {destination}, then paste it to continue."
+                )
 
     def _apply_shell_styles(self) -> None:
         self.setStyleSheet(APP_CHROME_STYLESHEET)

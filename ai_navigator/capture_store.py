@@ -9,6 +9,9 @@ from __future__ import annotations
 
 import re
 import sqlite3
+import json
+import os
+import tempfile
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from html import escape
@@ -149,3 +152,35 @@ def build_handoff(capture: DreamCapture, destination: str) -> str:
         f"## Summary\n{capture.summary}\n\n## Captured content\n{body}\n\n"
         f"## Handoff\n{instruction}"
     )
+
+
+def queue_pikit_handoff(
+    inbox_dir: Path, *, title: str, body: str, source_capture_id: int
+) -> Path:
+    """Atomically queue a document for PiKit's normal import command flow."""
+    inbox_dir.mkdir(parents=True, exist_ok=True)
+    payload = {
+        "version": 1,
+        "kind": "dream_capture",
+        "title": f"Dream Capture — {title}",
+        "body": body,
+        "source_capture_id": int(source_capture_id),
+        "queued_at": datetime.now(timezone.utc)
+        .isoformat(timespec="seconds")
+        .replace("+00:00", "Z"),
+    }
+    fd, temp_name = tempfile.mkstemp(
+        prefix=".dream-capture-", suffix=".tmp", dir=inbox_dir
+    )
+    temp_path = Path(temp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, ensure_ascii=False, indent=2)
+            handle.flush()
+            os.fsync(handle.fileno())
+        final_path = inbox_dir / f"dream-capture-{source_capture_id}-{os.getpid()}.json"
+        temp_path.replace(final_path)
+        return final_path
+    except Exception:
+        temp_path.unlink(missing_ok=True)
+        raise

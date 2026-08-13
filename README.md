@@ -8,7 +8,14 @@ AI Dream Communicator is the suite shell for three sibling products:
 
 The current shell lives in `ai_navigator/ai_navigator.py`. It launches AI Navigator as the default product mode and provides PiKit and FunKit launch tabs that start those sibling applications as separate processes.
 
-Future work will add a Dream Capsule substrate for shared memory across the suite. That server/protocol layer is not implemented in this initial shell snapshot.
+The first shared-memory workflow is now available as **Dream Capture**. AI
+Navigator can capture either a complete page or the current text selection,
+store summary/tag metadata in its local archive, and hand a clipboard-ready
+context packet to PiKit or FunKit. **Organize in PiKit** now queues that packet,
+automatically launches PiKit when `BASETEN_API_KEY` is already present, creates
+the document through PiKit's normal command processor, and opens it in PiKit's
+document pane. The future Dream Capsule server/protocol can replace this local
+persistence layer without changing the user workflow.
 
 ## Run
 

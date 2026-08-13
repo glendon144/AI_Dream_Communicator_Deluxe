@@ -7,6 +7,7 @@ from modules.ai_interface import AIInterface
 from modules.opml_extras_plugin import install_opml_extras_into_app
 from modules.save_as_text_plugin_v3 import install_save_as_text_into_app
 from modules.image_render_overlay import attach_image_rendering
+from dream_capture_inbox import start_inbox_polling
 # NOTE: Do NOT import the old modules.opml_extras_plugin.
 # NOTE: Do NOT import export_doc_patch; gui_tkinter already has robust _export_doc.
 
@@ -31,8 +32,15 @@ def main():
     install_opml_extras_into_app(app)      # URL→OPML, Convert→OPML, Batch Convert
     install_save_as_text_into_app(app)     # Save Binary As Text (DB-safe)
 
+    # AI Communicator handoffs use the same CommandProcessor import path as
+    # PiKit's normal document-receive flow, then refresh and open the new doc.
+    start_inbox_polling(
+        app,
+        processor,
+        Path("storage") / "handoffs",
+    )
+
     app.mainloop()
 
 if __name__ == "__main__":
     main()
-
