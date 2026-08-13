@@ -23,7 +23,7 @@ DEFAULT_API_KEY  = _env("PIKIT_OPENAI_API_KEY", "funkit-local")   # <— your se
 DEFAULT_MODEL    = _env("PIKIT_MODEL_NAME", "mistral-7b-instruct")
 DEFAULT_TIMEOUT  = float(_env("PIKIT_REQUEST_TIMEOUT", "600"))
 DEFAULT_TEMP     = float(_env("PIKIT_CHAT_TEMPERATURE", "0.7"))
-DEFAULT_MAXTOK   = int(_env("PIKIT_MAX_TOKENS_DEFAULT", "256"))
+DEFAULT_MAXTOK   = int(_env("PIKIT_MAX_TOKENS_DEFAULT", "8192"))
 DEBUG            = _env("PIKIT_DEBUG", "0") == "1"
 
 def _as_messages(user_or_messages: t.Union[str, t.List[Json]], system_prompt: t.Optional[str]) -> t.List[Json]:
@@ -202,4 +202,3 @@ class TriAIInterface(AIInterface):
     pass
 
 __all__ = ["AIInterface", "TriAIInterface"]
-

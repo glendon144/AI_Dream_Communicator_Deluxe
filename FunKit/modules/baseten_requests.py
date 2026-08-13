@@ -7,7 +7,7 @@ import os, requests, json
 BASE = os.getenv("BASETEN_BASE_URL", "https://inference.baseten.co/v1").rstrip("/")
 URL  = f"{BASE}/chat/completions"
 
-def chat_once(messages, model=None, temperature=0.7, max_tokens=512):
+def chat_once(messages, model=None, temperature=0.7, max_tokens=8192):
     model = model or os.getenv("BASETEN_MODEL") or "openai/gpt-oss-120b"
     key = os.getenv("BASETEN_API_KEY", "")
     if not key:
@@ -50,4 +50,3 @@ def chat_once(messages, model=None, temperature=0.7, max_tokens=512):
         return data["choices"][0]["message"]["content"]
     except Exception:
         return json.dumps(data, ensure_ascii=False)
-

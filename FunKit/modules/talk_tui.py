@@ -36,7 +36,7 @@ SPEAK_MIN_CHARS = int(
     os.environ.get("SPEAK_MIN_CHARS", "100")
 )  # retained for env compatibility
 SPEAK_PAUSE_SEC = float(os.environ.get("SPEAK_PAUSE_SEC", "0.04"))
-MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "700"))
+MAX_TOKENS = int(os.environ.get("MAX_TOKENS", "8192"))
 TEMPERATURE = float(os.environ.get("TEMPERATURE", "0.7"))
 ROLL_STYLE = (os.environ.get("ROLL_STYLE", "box") or "box").strip().lower()
 SAVE_WAV = os.environ.get("TALK_SAVE_WAV", "0") == "1"

@@ -17,7 +17,7 @@ def _key() -> str:
         raise RuntimeError("BASETEN_API_KEY not set (and ~/baseten.key not found)")
     return k
 
-def chat_once(messages, model=None, temperature=0.7, max_tokens=512):
+def chat_once(messages, model=None, temperature=0.7, max_tokens=8192):
     base = _base()               # e.g. https://inference.baseten.co/v1
     key  = _key()
     url  = f"{base}/chat/completions"

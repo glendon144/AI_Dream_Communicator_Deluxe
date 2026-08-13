@@ -16,8 +16,8 @@ from modules.text_sanitizer import sanitize_ai_reply
 
 # ------------ Config (env-tunable) ------------
 SHORT_THRESHOLD_TOKENS = int(os.getenv("PIKIT_SHORT_THRESHOLD_TOKENS", "200"))
-SHORT_MAX_TOKENS       = int(os.getenv("PIKIT_SHORT_MAX_TOKENS", "2048"))  # quick replies
-LONG_MAX_TOKENS        = int(os.getenv("PIKIT_LONG_MAX_TOKENS", "4096"))   # detailed replies
+SHORT_MAX_TOKENS       = int(os.getenv("PIKIT_SHORT_MAX_TOKENS", "8192"))   # quick replies
+LONG_MAX_TOKENS        = int(os.getenv("PIKIT_LONG_MAX_TOKENS", "16384"))  # detailed replies
 # If you simply want to "double tokens", bump LONG_MAX_TOKENS and/or SHORT_MAX_TOKENS above.
 # Timeout was already made env-configurable in ai_interface/local_ai_interface earlier.
 

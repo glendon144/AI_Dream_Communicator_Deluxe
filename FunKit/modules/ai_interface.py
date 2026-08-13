@@ -14,6 +14,7 @@ from openai import OpenAI
 from openai._exceptions import APIError, RateLimitError, APITimeoutError, APIConnectionError
 
 
+DEFAULT_MAX_TOKENS = int(os.getenv("FUNKIT_MAX_TOKENS_DEFAULT", "8192"))
 DEFAULT_BASE_URL = os.getenv("BASETEN_BASE_URL", "https://inference.baseten.co/v1")
 DEFAULT_MODEL    = os.getenv("BASETEN_MODEL", "openai/gpt-oss-120b")
 DEFAULT_TIMEOUT  = float(os.getenv("OPENAI_API_TIMEOUT", "60"))
@@ -69,7 +70,7 @@ class AIInterface:
              model: Optional[str] = None,
              temperature: float = 1.0,
              top_p: float = 1.0,
-             max_tokens: int = 1000,
+             max_tokens: int = DEFAULT_MAX_TOKENS,
              presence_penalty: float = 0.0,
              frequency_penalty: float = 0.0,
              stop: Optional[Iterable[str]] = None,
@@ -98,7 +99,7 @@ class AIInterface:
                model: Optional[str] = None,
                temperature: float = 1.0,
                top_p: float = 1.0,
-               max_tokens: int = 1000,
+               max_tokens: int = DEFAULT_MAX_TOKENS,
                presence_penalty: float = 0.0,
                frequency_penalty: float = 0.0,
                stop: Optional[Iterable[str]] = None,
