@@ -94,6 +94,13 @@ from bs4 import BeautifulSoup  # for OPML export parsing
 
 # Initializes storage/ and ensures archive_pages exists (same schema used below).
 from init_db import init_db_if_needed
+from capture_store import (
+    DreamCapture,
+    build_handoff,
+    ensure_capture_columns,
+    queue_pikit_handoff,
+    save_capture,
+)
 
 init_db_if_needed()
 
@@ -1196,13 +1203,18 @@ class BrowserPane(QWidget):
     browserFocusRequested = Signal()
 
     def __init__(
-        self, on_page_loaded=None, on_archive_request=None, on_memory_log=None
+        self,
+        on_page_loaded=None,
+        on_archive_request=None,
+        on_memory_log=None,
+        on_capture_request=None,
     ):
         super().__init__()
 
         self.on_page_loaded = on_page_loaded
         self.on_archive_request = on_archive_request
         self.on_memory_log = on_memory_log
+        self.on_capture_request = on_capture_request
 
         self.view = QWebEngineView()
         self.view.setPage(DiagnosticWebEnginePage(self.view))
@@ -1219,6 +1231,8 @@ class BrowserPane(QWidget):
         self.reload_button = QPushButton("Reload")
         self.home_button = QPushButton("Home")
         self.archive_button = QPushButton("Archive")
+        self.capture_page_button = QPushButton("Capture Page")
+        self.capture_selection_button = QPushButton("Capture Selection")
         self.opml_button = QPushButton("Export Outline")
         self.browser_focus_button = QPushButton("Focus Browser")
         self.mic_test_button = QPushButton("Test Microphone")
@@ -1260,6 +1274,8 @@ class BrowserPane(QWidget):
             _set_button_role(b, "nav")
         for b in (
             self.archive_button,
+            self.capture_page_button,
+            self.capture_selection_button,
             self.opml_button,
             self.browser_focus_button,
             self.mic_test_button,
@@ -1283,6 +1299,8 @@ class BrowserPane(QWidget):
         nav_row.addWidget(self.go_button)
 
         utility_row.addWidget(self.archive_button)
+        utility_row.addWidget(self.capture_page_button)
+        utility_row.addWidget(self.capture_selection_button)
         utility_row.addWidget(self.opml_button)
         utility_row.addWidget(self.browser_focus_button)
         utility_row.addWidget(self.mic_test_button)
@@ -1318,6 +1336,8 @@ class BrowserPane(QWidget):
         self.reload_button.clicked.connect(self.view.reload)
         self.home_button.clicked.connect(self.load_home)
         self.archive_button.clicked.connect(self._archive_current_page)
+        self.capture_page_button.clicked.connect(self._capture_current_page)
+        self.capture_selection_button.clicked.connect(self._capture_selection)
         self.opml_button.clicked.connect(self._export_outline_opml)
         self.browser_focus_button.clicked.connect(self.browserFocusRequested.emit)
         self.mic_test_button.clicked.connect(self._run_microphone_diagnostics)
@@ -1746,6 +1766,37 @@ class BrowserPane(QWidget):
 
         self.view.page().toHtml(got_html)
 
+    def _capture_current_page(self):
+        self._capture(selection_text="")
+
+    def _capture_selection(self):
+        selection = self.view.page().selectedText().strip()
+        if not selection:
+            QMessageBox.information(
+                self,
+                "Nothing selected",
+                "Select some text in the page, then choose Capture Selection.",
+            )
+            return
+        self._capture(selection_text=selection)
+
+    def _capture(self, selection_text: str):
+        current_url = self.view.url().toString()
+        current_title = self.view.title() or current_url
+
+        def got_html(html_str):
+            if not self.on_capture_request:
+                return
+            capture = self.on_capture_request(
+                current_url, current_title, html_str, selection_text
+            )
+            kind = "selection" if selection_text else "page"
+            self.status_label.setText(
+                f"Dream Capture saved ({kind}) — {capture.title}"
+            )
+
+        self.view.page().toHtml(got_html)
+
     # OPML export
     def _export_outline_opml(self):
         """Export the visible page's heading outline to ./archives/opml/*.opml"""
@@ -1779,6 +1830,7 @@ class ResultsPane(QWidget):
     """
 
     recoveredPage = Signal(str, str)  # html, url
+    handoffRequested = Signal(str, str, str, int)  # destination, packet, title, id
 
     def __init__(self, db_path: Path):
         super().__init__()
@@ -1795,6 +1847,8 @@ class ResultsPane(QWidget):
         self.recover_button = QPushButton("Recover")
         self.recover_chat_button = QPushButton("Recover to ChatGPT")
         self.recover_weave_button = QPushButton("Recover Memory Weave")
+        self.pikit_button = QPushButton("Organize in PiKit")
+        self.funkit_button = QPushButton("Ask FunKit")
 
         header_label = QLabel("Archived Pages")
         _set_section_title(header_label)
@@ -1807,6 +1861,8 @@ class ResultsPane(QWidget):
             self.recover_button,
             self.recover_chat_button,
             self.recover_weave_button,
+            self.pikit_button,
+            self.funkit_button,
         ):
             _set_button_role(b, "primary")
 
@@ -1821,6 +1877,8 @@ class ResultsPane(QWidget):
         details_header_row = QHBoxLayout()
         details_header_row.addWidget(details_label)
         details_header_row.addStretch(1)
+        details_header_row.addWidget(self.pikit_button)
+        details_header_row.addWidget(self.funkit_button)
         details_header_row.addWidget(self.recover_weave_button)
         details_header_row.addWidget(self.recover_chat_button)
         details_header_row.addWidget(self.recover_button)
@@ -1834,6 +1892,8 @@ class ResultsPane(QWidget):
         self.recover_button.clicked.connect(self._recover_selected)
         self.recover_chat_button.clicked.connect(self._recover_to_chatgpt_selected)
         self.recover_weave_button.clicked.connect(self._recover_memory_weave_selected)
+        self.pikit_button.clicked.connect(lambda: self._handoff_selected("PiKit"))
+        self.funkit_button.clicked.connect(lambda: self._handoff_selected("FunKit"))
 
         self._ensure_connection()
         self._populate_archive_list()
@@ -1841,6 +1901,7 @@ class ResultsPane(QWidget):
     def _ensure_connection(self):
         if self.conn is None:
             ensure_archive_table(self.db_path)
+            ensure_capture_columns(self.db_path)
             self.conn = sqlite3.connect(self.db_path)
 
     def _populate_archive_list(self):
@@ -1850,14 +1911,15 @@ class ResultsPane(QWidget):
         cur = self.conn.cursor()
         cur.execute(
             """
-            SELECT id, title, captured_at
+            SELECT id, title, captured_at, capture_type
             FROM archive_pages
             ORDER BY captured_at DESC
             LIMIT 200;
             """
         )
-        for page_id, title, captured_at in cur.fetchall():
-            label = f"{title}    ({captured_at})"
+        for page_id, title, captured_at, capture_type in cur.fetchall():
+            marker = "Selection" if capture_type == "selection" else "Page"
+            label = f"[{marker}] {title}    ({captured_at})"
             item = QListWidgetItem(label)
             item.setData(Qt.UserRole, page_id)
             self.archive_list.addItem(item)
@@ -1871,15 +1933,50 @@ class ResultsPane(QWidget):
         page_id = current.data(Qt.UserRole)
         cur = self.conn.cursor()
         cur.execute(
-            "SELECT url, snippet FROM archive_pages WHERE id = ?;",
+            """
+            SELECT url, snippet, summary, tags, note
+            FROM archive_pages WHERE id = ?;
+            """,
             (page_id,),
         )
         row = cur.fetchone()
         if not row:
             return
-        url, snippet = row
-        preview_text = f"{url}\n\n{snippet}"
+        url, snippet, summary, tags, note = row
+        preview_text = (
+            f"{url}\n\nSummary\n{summary or snippet}\n\n"
+            f"Tags\n{tags or '(none)'}"
+        )
+        if note:
+            preview_text += f"\n\nNote\n{note}"
         self.details_list.addItem(QListWidgetItem(preview_text))
+
+    def _selected_capture(self) -> DreamCapture | None:
+        item = self.archive_list.currentItem()
+        if self.conn is None or item is None:
+            return None
+        row = self.conn.execute(
+            """
+            SELECT id, url, title, captured_at, capture_type, selection_text,
+                   summary, tags, note
+            FROM archive_pages WHERE id = ?
+            """,
+            (item.data(Qt.UserRole),),
+        ).fetchone()
+        return DreamCapture(*row) if row else None
+
+    def _handoff_selected(self, destination: str):
+        capture = self._selected_capture()
+        if capture is None:
+            QMessageBox.information(
+                self, "No selection", "Select a captured page or selection first."
+            )
+            return
+        packet = build_handoff(capture, destination)
+        if not copy_to_clipboard(packet):
+            QMessageBox.warning(self, "Clipboard problem", "Could not copy the capture.")
+            return
+        self.handoffRequested.emit(destination, packet, capture.title, capture.id)
 
     def _recover_selected(self):
         if self.conn is None:
@@ -3174,6 +3271,8 @@ class MainWindow(QWidget):
       BrowserPane | ResultsPane | MemoryPane | GmailPane | WebMCPActionsPane
     """
 
+    productHandoffRequested = Signal(str, str, str, int)
+
     def __init__(self):
         super().__init__()
 
@@ -3186,6 +3285,7 @@ class MainWindow(QWidget):
             on_page_loaded=self._handle_page_loaded,
             on_archive_request=self._handle_archive_request,
             on_memory_log=self._handle_memory_log,
+            on_capture_request=self._handle_capture_request,
         )
         self.gmail_pane = GmailPane(browser_pane=self.browser_pane)
         self.webmcp_pane = WebMCPActionsPane(self.browser_pane)
@@ -3195,6 +3295,7 @@ class MainWindow(QWidget):
         self._saved_mid_visibility = None
 
         self.results_pane.recoveredPage.connect(self._handle_recovered_page)
+        self.results_pane.handoffRequested.connect(self.productHandoffRequested.emit)
         self.memory_pane.openUrlRequested.connect(self.browser_pane.load_from_memory)
         self.browser_pane.browserFocusRequested.connect(self._toggle_browser_focus)
 
@@ -3342,6 +3443,22 @@ class MainWindow(QWidget):
     def _handle_archive_request(self, url: str, title: str, html: str):
         save_archive_page(DB_PATH, url, title, html)
         self.results_pane.refresh_all()
+
+    def _handle_capture_request(
+        self, url: str, title: str, html: str, selection_text: str
+    ) -> DreamCapture:
+        capture = save_capture(
+            DB_PATH,
+            url=url,
+            title=title,
+            page_html=html,
+            selection_text=selection_text,
+        )
+        self.results_pane.refresh_all()
+        self._focus_side_pane(0)
+        if self.results_pane.archive_list.count():
+            self.results_pane.archive_list.setCurrentRow(0)
+        return capture
 
     def _handle_memory_log(self, url: str, title: str, html: str):
         log_memory_entry(MEMORY_DB_PATH, url, title, html)
@@ -3616,6 +3733,70 @@ class ProductLauncherPane(QWidget):
 
         self.status_label.setText(f"Launching {self.title} with {python_exe}")
 
+    def _environment_if_required_keys_present(self) -> QProcessEnvironment | None:
+        """Return a launch environment without prompting, or None if a key is absent."""
+        env = QProcessEnvironment.systemEnvironment()
+        for env_key in self._required_env_keys():
+            value = (os.environ.get(env_key) or "").strip()
+            if not value:
+                return None
+            env.insert(env_key, value)
+        return env
+
+    def accept_pikit_handoff(
+        self, *, packet: str, title: str, source_capture_id: int
+    ) -> bool:
+        """Queue a capture and launch PiKit automatically when its key is present."""
+        if self.title != "PiKit":
+            raise ValueError("PiKit handoffs require the PiKit launcher pane")
+        inbox_dir = self.root_path / "storage" / "handoffs"
+        queued_path = queue_pikit_handoff(
+            inbox_dir,
+            title=title,
+            body=packet,
+            source_capture_id=source_capture_id,
+        )
+        self.output_view.append(f"Queued Dream Capture: {queued_path.name}")
+
+        if self.process and self.process.state() != QProcess.NotRunning:
+            self.status_label.setText(
+                "Dream Capture queued. PiKit will open it momentarily."
+            )
+            return True
+
+        launch_env = self._environment_if_required_keys_present()
+        if launch_env is None:
+            required = ", ".join(self._required_env_keys())
+            self.status_label.setText(
+                f"Dream Capture queued. Automatic launch needs {required}; "
+                "use Launch PiKit to provide it."
+            )
+            return False
+
+        entrypoint = self.root_path / "main.py"
+        python_exe = self._python_executable()
+        if not entrypoint.exists() or not python_exe.exists():
+            self.status_label.setText(
+                "Dream Capture queued, but the PiKit entrypoint or Python is missing."
+            )
+            return False
+
+        self.output_view.clear()
+        self.process = QProcess(self)
+        self.process.setWorkingDirectory(str(self.root_path))
+        self.process.setProcessEnvironment(launch_env)
+        self.process.setProgram(str(python_exe))
+        self.process.setArguments([str(entrypoint)])
+        self.process.readyReadStandardOutput.connect(self._append_stdout)
+        self.process.readyReadStandardError.connect(self._append_stderr)
+        self.process.finished.connect(self._handle_finished)
+        self.process.errorOccurred.connect(self._handle_error)
+        self.process.start()
+        self.status_label.setText(
+            "Launching PiKit; the new Dream Capture will open automatically."
+        )
+        return True
+
     def _append_stdout(self):
         if self.process:
             text = bytes(self.process.readAllStandardOutput()).decode(
@@ -3682,6 +3863,7 @@ class SuiteShell(QWidget):
         sidebar_layout.addWidget(hint_label)
 
         self.ai_navigator = MainWindow()
+        self.ai_navigator.productHandoffRequested.connect(self._handle_product_handoff)
         self._add_product_button("AI Navigator", self.ai_navigator, sidebar_layout)
         self._add_product_button(
             "PiKit",
@@ -3728,6 +3910,24 @@ class SuiteShell(QWidget):
         self.product_stack.setCurrentIndex(index)
         for idx, button in enumerate(self.product_buttons):
             button.setChecked(idx == index)
+
+    def _handle_product_handoff(
+        self, destination: str, packet: str, title: str, source_capture_id: int
+    ) -> None:
+        index = 1 if destination == "PiKit" else 2
+        self._select_product(index)
+        pane = self.product_stack.widget(index)
+        if isinstance(pane, ProductLauncherPane):
+            if destination == "PiKit":
+                pane.accept_pikit_handoff(
+                    packet=packet,
+                    title=title,
+                    source_capture_id=source_capture_id,
+                )
+            else:
+                pane.status_label.setText(
+                    f"Dream Capture copied. Launch {destination}, then paste it to continue."
+                )
 
     def _apply_shell_styles(self) -> None:
         self.setStyleSheet(APP_CHROME_STYLESHEET)
