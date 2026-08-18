@@ -428,6 +428,122 @@ class App(tk.Tk):
         except Exception as e:
             messagebox.showerror("Memory", f"Failed to open memory dialog: {e}")
 
+    def _return_to_navigator(self):
+        """Return focus to the AI Navigator suite shell.
+
+        PiKit runs as a separate Tk process launched from AI Navigator's
+        Applications / PiKit pane. This restores the Navigator window so
+        the user is not stranded in PiKit.
+        """
+        activated = False
+        # Best-effort OS window activation (no new Navigator process)
+        try:
+            if sys.platform == "darwin":
+                # macOS: bring Python / AI Navigator to front via AppleScript
+                for script in (
+                    'tell application "System Events" to set frontmost of every process whose name contains "Python" to true',
+                    'tell application "Python" to activate',
+                ):
+                    try:
+                        subprocess.run(
+                            ["osascript", "-e", script],
+                            timeout=2,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        activated = True
+                    except Exception:
+                        continue
+            elif sys.platform.startswith("linux"):
+                for cmd in (
+                    ["wmctrl", "-a", "AI Navigator"],
+                    ["wmctrl", "-a", "Navigator"],
+                    ["xdotool", "search", "--name", "AI Navigator", "windowactivate"],
+                ):
+                    try:
+                        subprocess.run(
+                            cmd,
+                            timeout=2,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        activated = True
+                        break
+                    except Exception:
+                        continue
+            elif sys.platform.startswith("win"):
+                try:
+                    import ctypes  # noqa: F401
+
+                    # PowerShell: bring window titled AI Navigator to front
+                    ps = (
+                        "Add-Type @'\n"
+                        "using System; using System.Runtime.InteropServices;\n"
+                        "public class W { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);"
+                        " [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); }\n"
+                        "'@; "
+                        "Get-Process | Where-Object {$_.MainWindowTitle -like '*Navigator*'} | ForEach-Object { [W]::ShowWindow($_.MainWindowHandle,9); [W]::SetForegroundWindow($_.MainWindowHandle) | Out-Null }"
+                    )
+                    subprocess.run(
+                        ["powershell", "-Command", ps],
+                        timeout=3,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    activated = True
+                except Exception:
+                    pass
+        except Exception:
+            pass
+
+        # Reveal Navigator by minimizing / lowering PiKit
+        try:
+            self.lower()
+        except Exception:
+            pass
+        try:
+            self.iconify()
+        except Exception:
+            pass
+        try:
+            self.status.set("Returning to AI Navigator…")
+        except Exception:
+            pass
+
+        # If activation likely failed, offer to launch Navigator
+        if not activated:
+            # Check if Navigator entry point exists before offering to launch
+            try:
+                suite_dir = Path(__file__).resolve().parent.parent.parent
+                nav_entry = suite_dir / "ai_navigator" / "ai_navigator.py"
+                # Also handle case where suite_dir is PiKit itself (fallback)
+                if not nav_entry.exists():
+                    alt = Path(__file__).resolve().parent.parent / "ai_navigator" / "ai_navigator.py"
+                    if alt.exists():
+                        nav_entry = alt
+                if nav_entry.exists():
+                    if messagebox.askyesno(
+                        "Return to AI Navigator",
+                        "PiKit has been minimized to reveal AI Navigator.\n\n"
+                        "If AI Navigator was closed, click Yes to relaunch it.",
+                    ):
+                        try:
+                            subprocess.Popen(
+                                [sys.executable, str(nav_entry)],
+                                cwd=str(nav_entry.parent),
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True,
+                            )
+                            self.status.set("AI Navigator relaunching…")
+                        except Exception as e:
+                            messagebox.showerror("AI Navigator", f"Failed to launch: {e}")
+                    return
+            except Exception:
+                pass
+            # Generic hint when we cannot verify activation
+            self.status.set("PiKit minimized — select AI Navigator in Dock / taskbar.")
+
     # ---------- UI ----------
     def _build_ui(self):
         root = self
@@ -457,11 +573,25 @@ class App(tk.Tk):
         toolsmenu.add_command(label="Memory…", command=self._open_memory_dialog)
         menubar.add_cascade(label="Tools", menu=toolsmenu)
 
+        windowmenu = tk.Menu(menubar, tearoff=0)
+        windowmenu.add_command(
+            label="Show AI Navigator", command=self._return_to_navigator
+        )
+        windowmenu.add_command(
+            label="Return to AI Navigator…", command=self._return_to_navigator
+        )
+        menubar.add_cascade(label="Window", menu=windowmenu)
+
         root.config(menu=menubar)
 
         # Toolbar
         bar = ttk.Frame(root)
         bar.pack(side="top", fill="x")
+
+        ttk.Button(
+            bar, text="◀ AI Navigator", command=self._return_to_navigator
+        ).pack(side="left", padx=4, pady=4)
+        ttk.Separator(bar, orient="vertical").pack(side="left", fill="y", padx=6)
 
         ttk.Button(bar, text="Ask", command=self._on_ask).pack(
             side="left", padx=4, pady=4

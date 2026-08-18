@@ -368,18 +368,27 @@ class DemoKitGUI(tk.Tk):
         self.topbar = ttk.Frame(self)
         self.topbar.grid(row=1, column=0, columnspan=2, sticky="ew")
 
+        # Return to AI Navigator (suite shell)
+        self.navigator_button = ttk.Button(
+            self.topbar, text="◀ AI Navigator", command=self._return_to_navigator
+        )
+        self.navigator_button.grid(row=0, column=0, sticky="w", padx=(4, 8))
+        ttk.Separator(self.topbar, orient="vertical").grid(
+            row=0, column=1, sticky="ns", padx=2, pady=4
+        )
+
         # Provider switch (left)
         self.provider_switch = ProviderDropdown(self.topbar, status_cb=getattr(self, "status", None))
-        self.provider_switch.grid(row=0, column=0, sticky="w")
+        self.provider_switch.grid(row=0, column=2, sticky="w")
 
         # URL/Search entry (right side)
-        self.topbar.grid_columnconfigure(1, weight=1)
+        self.topbar.grid_columnconfigure(3, weight=1)
         self.url_var = tk.StringVar()
         self.url_entry = ttk.Entry(self.topbar, textvariable=self.url_var)
-        self.url_entry.grid(row=0, column=1, sticky="ew", padx=(8, 4))
+        self.url_entry.grid(row=0, column=3, sticky="ew", padx=(8, 4))
         self.url_entry.bind("<Return>", self._on_url_entered)
         self.go_btn = ttk.Button(self.topbar, text="Go", command=self._on_url_entered)
-        self.go_btn.grid(row=0, column=2, sticky="e", padx=(4, 6))
+        self.go_btn.grid(row=0, column=4, sticky="e", padx=(4, 6))
 
         # image state
         self._last_pil_img: Image.Image | None = None
@@ -414,6 +423,11 @@ class DemoKitGUI(tk.Tk):
         viewmenu.add_command(label="Set OPML Expand Depth…", command=self._set_opml_expand_depth)
         menubar.add_cascade(label="View", menu=viewmenu)
 
+        windowmenu = tk.Menu(menubar, tearoff=0)
+        windowmenu.add_command(label="Show AI Navigator", command=self._return_to_navigator)
+        windowmenu.add_command(label="Return to AI Navigator…", command=self._return_to_navigator)
+        menubar.add_cascade(label="Window", menu=windowmenu)
+
         self.config(menu=menubar)
         self.bind("<Control-t>", lambda e: self.on_tree_button())
 
@@ -436,6 +450,112 @@ class DemoKitGUI(tk.Tk):
             self.banner.push(str(msg))
         except Exception:
             pass
+
+    def _return_to_navigator(self):
+        """Return focus to the AI Navigator suite shell."""
+        activated = False
+        try:
+            if sys.platform == "darwin":
+                for script in (
+                    'tell application "System Events" to set frontmost of every process whose name contains "Python" to true',
+                    'tell application "Python" to activate',
+                ):
+                    try:
+                        subprocess.run(
+                            ["osascript", "-e", script],
+                            timeout=2,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        activated = True
+                    except Exception:
+                        continue
+            elif sys.platform.startswith("linux"):
+                for cmd in (
+                    ["wmctrl", "-a", "AI Navigator"],
+                    ["wmctrl", "-a", "Navigator"],
+                    ["xdotool", "search", "--name", "AI Navigator", "windowactivate"],
+                ):
+                    try:
+                        subprocess.run(
+                            cmd,
+                            timeout=2,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                        )
+                        activated = True
+                        break
+                    except Exception:
+                        continue
+            elif sys.platform.startswith("win"):
+                try:
+                    import ctypes  # noqa: F401
+
+                    ps = (
+                        "Add-Type @'\n"
+                        "using System; using System.Runtime.InteropServices;\n"
+                        "public class W { [DllImport(\"user32.dll\")] public static extern bool SetForegroundWindow(IntPtr h);"
+                        " [DllImport(\"user32.dll\")] public static extern bool ShowWindow(IntPtr h,int c); }\n"
+                        "'@; "
+                        "Get-Process | Where-Object {$_.MainWindowTitle -like '*Navigator*'} | ForEach-Object { [W]::ShowWindow($_.MainWindowHandle,9); [W]::SetForegroundWindow($_.MainWindowHandle) | Out-Null }"
+                    )
+                    subprocess.run(
+                        ["powershell", "-Command", ps],
+                        timeout=3,
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                    )
+                    activated = True
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        try:
+            self.lower()
+        except Exception:
+            pass
+        try:
+            self.iconify()
+        except Exception:
+            pass
+        try:
+            self.status("Returning to AI Navigator…")
+        except Exception:
+            pass
+        if not activated:
+            try:
+                # FunKit/gui_tkinter.py sits at FunKit/ — one level up is suite dir
+                suite_dir = Path(__file__).resolve().parent.parent
+                # If that suite_dir doesn't contain ai_navigator, try parent
+                nav_entry = suite_dir / "ai_navigator" / "ai_navigator.py"
+                if not nav_entry.exists():
+                    alt = Path(__file__).resolve().parent / "ai_navigator" / "ai_navigator.py"
+                    if alt.exists():
+                        nav_entry = alt
+                if nav_entry.exists():
+                    if messagebox.askyesno(
+                        "Return to AI Navigator",
+                        "FunKit has been minimized to reveal AI Navigator.\n\n"
+                        "If AI Navigator was closed, click Yes to relaunch it.",
+                    ):
+                        try:
+                            subprocess.Popen(
+                                [sys.executable, str(nav_entry)],
+                                cwd=str(nav_entry.parent),
+                                stdout=subprocess.DEVNULL,
+                                stderr=subprocess.DEVNULL,
+                                start_new_session=True,
+                            )
+                            self.status("AI Navigator relaunching…")
+                        except Exception as e:
+                            messagebox.showerror("AI Navigator", f"Failed to launch: {e}")
+                    return
+            except Exception:
+                pass
+            try:
+                self.status("FunKit minimized — select AI Navigator in Dock / taskbar.")
+            except Exception:
+                pass
 
     # ---------------- Settings ----------------
 
