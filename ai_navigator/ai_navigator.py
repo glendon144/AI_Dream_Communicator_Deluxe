@@ -3799,6 +3799,11 @@ class ProductLauncherPane(QWidget):
         self.setLayout(layout)
 
     def _python_executable(self) -> Path:
+        if getattr(sys, "frozen", False):
+            packaged_name = "pikit" if self.title == "PiKit" else "funkit"
+            packaged_executable = Path(sys.executable).resolve().parent.parent / packaged_name / packaged_name
+            if packaged_executable.exists():
+                return packaged_executable
         suite_python = Path.home() / ".venvs" / "ai_communicator" / "bin" / "python"
         if suite_python.exists():
             return suite_python
@@ -3952,7 +3957,8 @@ class ProductLauncherPane(QWidget):
             return
 
         entrypoint = self.root_path / "main.py"
-        if not entrypoint.exists():
+        packaged = getattr(sys, "frozen", False)
+        if not packaged and not entrypoint.exists():
             self.status_label.setText(f"Missing entrypoint: {entrypoint}")
             return
 
@@ -3970,10 +3976,10 @@ class ProductLauncherPane(QWidget):
 
         self.output_view.clear()
         self.process = QProcess(self)
-        self.process.setWorkingDirectory(str(self.root_path))
+        self.process.setWorkingDirectory(str(Path.home()))
         self.process.setProcessEnvironment(launch_env)
         self.process.setProgram(str(python_exe))
-        self.process.setArguments([str(entrypoint)])
+        self.process.setArguments([] if packaged else [str(entrypoint)])
         self.process.readyReadStandardOutput.connect(self._append_stdout)
         self.process.readyReadStandardError.connect(self._append_stderr)
         self.process.finished.connect(self._handle_finished)

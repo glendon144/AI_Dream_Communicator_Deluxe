@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from modules.app_runtime import build_processor
 from modules.gui_tkinter import DemoKitGUI
 from modules.opml_bridge import install_opml_extras_into_app
@@ -7,6 +8,11 @@ from modules.image_render_overlay import attach_image_rendering
 
 
 def main():
+    if "--packaged-smoke-test" in sys.argv:
+        import tkinter
+        from PIL import Image
+        print(f"funkit ok: tkinter={tkinter.TkVersion} pillow={Image.__version__}")
+        return
     Path("storage").mkdir(parents=True, exist_ok=True)
     doc_store, _ai, processor = build_processor()
 

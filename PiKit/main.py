@@ -1,4 +1,5 @@
 from pathlib import Path
+import sys
 from modules.document_store import DocumentStore
 from modules.command_processor import CommandProcessor
 from modules.gui_tkinter import DemoKitGUI
@@ -12,6 +13,11 @@ from dream_capture_inbox import start_inbox_polling
 # NOTE: Do NOT import export_doc_patch; gui_tkinter already has robust _export_doc.
 
 def main():
+    if "--packaged-smoke-test" in sys.argv:
+        import tkinter
+        from PIL import Image
+        print(f"pikit ok: tkinter={tkinter.TkVersion} pillow={Image.__version__}")
+        return
     # Ensure the storage directory exists
     Path("storage").mkdir(parents=True, exist_ok=True)
 
