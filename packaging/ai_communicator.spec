@@ -1,9 +1,20 @@
 from pathlib import Path
 
-from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT
+from PyInstaller.building.build_main import Analysis, PYZ, EXE, COLLECT, BUNDLE
 
-ROOT = Path(SPECPATH).parent
+# SPECPATH is the directory containing this file (``packaging``), while all
+# paths below are relative to the repository root.
+ROOT = Path(SPECPATH).resolve().parent
 PYTHONPATH = [str(ROOT / "ai_navigator"), str(ROOT / "PiKit"), str(ROOT / "FunKit")]
+
+# PyInstaller's PySide6 hook collects the QtWebEngineCore framework, but can
+# omit the nested helper app when several applications are collected from one
+# spec.  QtWebEngineCore needs this subprocess at runtime.
+QTWEBENGINE_HELPER = (
+    Path(__import__("PySide6").__file__).resolve().parent
+    / "Qt" / "lib" / "QtWebEngineCore.framework" / "Helpers"
+    / "QtWebEngineProcess.app"
+)
 
 
 def data_tree(name: str):
@@ -25,7 +36,7 @@ COMMON_HIDDEN_IMPORTS = [
 ]
 
 
-def make_collect(name: str, script: Path, hiddenimports, datas):
+def make_collect(name: str, script: Path, hiddenimports, datas, app_name: str | None = None):
     analysis = Analysis(
         [str(script)], pathex=PYTHONPATH, binaries=[], datas=datas,
         hiddenimports=hiddenimports, hookspath=[], hooksconfig={},
@@ -35,18 +46,32 @@ def make_collect(name: str, script: Path, hiddenimports, datas):
     exe = EXE(
         pyz, analysis.scripts, [], [], [],
         name=name, debug=False, bootloader_ignore_signals=False,
-        strip=False, upx=False, console=True, exclude_binaries=True,
+        # The navigator is a GUI app.  console=True causes PyInstaller to mark
+        # the macOS bundle as background-only, so Finder appears to do nothing.
+        strip=False, upx=False, console=not bool(app_name), exclude_binaries=True,
     )
-    return COLLECT(
-        exe, analysis.binaries, analysis.datas, strip=False, upx=False, name=name,
-    )
+    if app_name:
+        return BUNDLE(
+            exe, analysis.binaries, analysis.datas,
+            name=app_name, icon=None, bundle_identifier="com.gross.ai-dream-communicator-deluxe",
+        )
+    return COLLECT(exe, analysis.binaries, analysis.datas, strip=False, upx=False, name=name)
 
 
 navigator_collect = make_collect(
     "ai_navigator",
     ROOT / "ai_navigator" / "ai_navigator.py",
-    ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
-    data_tree("webmcp_relay"),
+    [
+        "PySide6.QtWebEngineCore",
+        "PySide6.QtWebEngineWidgets",
+        # Imported dynamically by webmcp_relay/logging_setup.py.
+        "logging.handlers",
+    ],
+    data_tree("ai_navigator") + data_tree("webmcp_relay") + [
+        (str(QTWEBENGINE_HELPER),
+         "PySide6/Qt/lib/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app"),
+    ],
+    app_name="ai_dream_communicator_deluxe.app",
 )
 pikit_collect = make_collect(
     "pikit", ROOT / "PiKit" / "main.py", COMMON_HIDDEN_IMPORTS,
