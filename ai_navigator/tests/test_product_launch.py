@@ -215,3 +215,63 @@ def test_pikit_dependency_check_openai_is_importable(pikit_pane):
         text=True,
     )
     assert result.returncode == 0, f"Missing deps: {result.stderr}"
+
+
+def test_vertical_menu_launches_pikit_pane_and_triggers_process(suite_shell, qtbot):
+    pikit_pane = suite_shell.product_stack.widget(1)
+    pikit_pane._ensure_runtime_dependencies = MagicMock(return_value=True)
+    pikit_pane._ensure_launch_environment = MagicMock(return_value=MagicMock())
+
+    with patch("ai_navigator.QProcess") as mock_qprocess:
+        mock_process = MagicMock()
+        mock_process.state.return_value = MagicMock()
+        mock_qprocess.return_value = mock_process
+
+        _click_sidebar_button(qtbot, suite_shell, 1)
+        pikit_pane.launch_button.click()
+
+        assert suite_shell.product_stack.currentIndex() == 1
+        mock_process.start.assert_called_once()
+
+
+def test_vertical_menu_launches_funkit_pane_and_triggers_process(suite_shell, qtbot):
+    funkit_pane = suite_shell.product_stack.widget(2)
+    funkit_pane._ensure_runtime_dependencies = MagicMock(return_value=True)
+    funkit_pane._ensure_launch_environment = MagicMock(return_value=MagicMock())
+
+    with patch("ai_navigator.QProcess") as mock_qprocess:
+        mock_process = MagicMock()
+        mock_process.state.return_value = MagicMock()
+        mock_qprocess.return_value = mock_process
+
+        _click_sidebar_button(qtbot, suite_shell, 2)
+        funkit_pane.launch_button.click()
+
+        assert suite_shell.product_stack.currentIndex() == 2
+        mock_process.start.assert_called_once()
+
+
+def test_env_key_prompt_dialog_sets_missing_key(monkeypatch):
+    import os
+    import ai_navigator
+
+    monkeypatch.delenv("TEST_PROMPT_KEY", raising=False)
+    with patch("ai_navigator.EnvKeyPromptDialog") as mock_dialog_cls:
+        mock_dialog_instance = MagicMock()
+        mock_dialog_instance.exec.return_value = ai_navigator.QDialog.Accepted
+        mock_dialog_instance.key_value.return_value = "secret_key_12345"
+        mock_dialog_cls.return_value = mock_dialog_instance
+
+        pane = ai_navigator.ProductLauncherPane(
+            "TestProduct",
+            "Test description",
+            ai_navigator.SUITE_DIR / "PiKit",
+            "pikit",
+        )
+        pane._required_env_keys = lambda: ["TEST_PROMPT_KEY"]
+
+        env = pane._ensure_launch_environment()
+        assert env is not None
+        assert env.value("TEST_PROMPT_KEY") == "secret_key_12345"
+        assert os.environ.get("TEST_PROMPT_KEY") == "secret_key_12345"
+

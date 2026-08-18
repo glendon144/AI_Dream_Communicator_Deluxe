@@ -139,10 +139,30 @@ WEBMCP_CLIENT_MODULE = str(
 WEBMCP_FLASK_BASE_URL = os.getenv("WEBMCP_FLASK_BASE_URL", "http://127.0.0.1:5054")
 APP_DIR = Path(__file__).resolve().parent
 SUITE_DIR = APP_DIR.parent
-PIKIT_ROOT = Path(os.getenv("PIKIT_ROOT", str(SUITE_DIR / "PiKit-main"))).expanduser()
-FUNKIT_ROOT = Path(
-    os.getenv("FUNKIT_ROOT", str(SUITE_DIR / "funkit-main"))
-).expanduser()
+
+
+def _resolve_pikit_root() -> Path:
+    env_path = os.getenv("PIKIT_ROOT")
+    if env_path:
+        return Path(env_path).expanduser()
+    for candidate in (SUITE_DIR / "PiKit", SUITE_DIR / "PiKit-main"):
+        if candidate.exists():
+            return candidate
+    return SUITE_DIR / "PiKit"
+
+
+def _resolve_funkit_root() -> Path:
+    env_path = os.getenv("FUNKIT_ROOT")
+    if env_path:
+        return Path(env_path).expanduser()
+    for candidate in (SUITE_DIR / "FunKit", SUITE_DIR / "funkit-main"):
+        if candidate.exists():
+            return candidate
+    return SUITE_DIR / "FunKit"
+
+
+PIKIT_ROOT = _resolve_pikit_root()
+FUNKIT_ROOT = _resolve_funkit_root()
 GMAIL_JANITOR_SCRIPT = Path(
     os.getenv("GMAIL_JANITOR_SCRIPT", str(APP_DIR / "gmail_janitor.py"))
 ).expanduser()
@@ -1320,11 +1340,18 @@ class BrowserPane(QWidget):
         status_bg.setLayout(status_row)
         status_row.addWidget(self.status_label)
 
+        self.top_toolbar_splitter = QSplitter(Qt.Vertical)
+        self.top_toolbar_splitter.setHandleWidth(8)
+        self.top_toolbar_splitter.addWidget(toolbar_bg)
+        self.top_toolbar_splitter.addWidget(self.view)
+        self.top_toolbar_splitter.setCollapsible(0, False)
+        self.top_toolbar_splitter.setCollapsible(1, False)
+        self.top_toolbar_splitter.setSizes([90, 710])
+
         layout = QVBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
         layout.setSpacing(0)
-        layout.addWidget(toolbar_bg)
-        layout.addWidget(self.view, stretch=1)
+        layout.addWidget(self.top_toolbar_splitter, stretch=1)
         layout.addWidget(status_bg)
         self.setLayout(layout)
 
@@ -3357,11 +3384,18 @@ class MainWindow(QWidget):
         self.webmcp_menu_button.clicked.connect(lambda: self._focus_side_pane(3))
         self.restore_menu_button.clicked.connect(self._restore_default_layout)
 
+        self.top_splitter = QSplitter(Qt.Vertical)
+        self.top_splitter.setHandleWidth(8)
+        self.top_splitter.addWidget(self.menu_bar_row)
+        self.top_splitter.addWidget(self.outer_splitter)
+        self.top_splitter.setCollapsible(0, False)
+        self.top_splitter.setCollapsible(1, False)
+        self.top_splitter.setSizes([50, 850])
+
         main_layout = QVBoxLayout()
         main_layout.setContentsMargins(12, 12, 12, 12)
         main_layout.setSpacing(12)
-        main_layout.addWidget(self.menu_bar_row)
-        main_layout.addWidget(self.outer_splitter)
+        main_layout.addWidget(self.top_splitter)
         self.setLayout(main_layout)
         self.outer_splitter.setHandleWidth(8)
         self.mid_splitter.setHandleWidth(8)
@@ -3766,12 +3800,14 @@ class ProductLauncherPane(QWidget):
 
         launch_env = self._environment_if_required_keys_present()
         if launch_env is None:
-            required = ", ".join(self._required_env_keys())
-            self.status_label.setText(
-                f"Dream Capture queued. Automatic launch needs {required}; "
-                "use Launch PiKit to provide it."
-            )
-            return False
+            launch_env = self._ensure_launch_environment()
+            if launch_env is None:
+                required = ", ".join(self._required_env_keys())
+                self.status_label.setText(
+                    f"Dream Capture queued. Automatic launch needs {required}; "
+                    "use Launch PiKit to provide it."
+                )
+                return False
 
         entrypoint = self.root_path / "main.py"
         python_exe = self._python_executable()

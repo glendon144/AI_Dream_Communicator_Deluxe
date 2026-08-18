@@ -22,9 +22,7 @@ DEFAULT_TIMEOUT  = float(os.getenv("OPENAI_API_TIMEOUT", "60"))
 def _mk_client(api_key: Optional[str] = None,
                base_url: Optional[str] = None,
                timeout: Optional[float] = None) -> OpenAI:
-    key = api_key or os.getenv("BASETEN_API_KEY")
-    if not key:
-        raise RuntimeError("BASETEN_API_KEY is not set")
+    key = api_key or os.getenv("BASETEN_API_KEY") or "NOT_SET"
     return OpenAI(
         api_key=key,
         base_url=base_url or DEFAULT_BASE_URL,
