@@ -44,6 +44,42 @@ def test_webmcp_payload_view_wraps_long_json_lines(qtbot, monkeypatch):
     assert pane.resize_scrollbar.height() >= pane.height() - 24
 
 
+def test_narrow_webmcp_keeps_action_buttons_visible(qtbot, monkeypatch):
+    import ai_navigator
+
+    monkeypatch.setattr(ai_navigator, "WEBMCP_RELAY_SERVER", "/path/that/does/not/exist")
+    browser = QWidget()
+    pane = ai_navigator.WebMCPActionsPane(browser)
+    qtbot.addWidget(browser)
+    qtbot.addWidget(pane)
+    pane.resize(320, 650)
+    pane.show()
+    qtbot.wait(20)
+
+    assert pane._top_row.direction().name == "TopToBottom"
+    assert pane._call_row.direction().name == "TopToBottom"
+    for button in (pane.refresh_button, pane.inspect_button, pane.execute_button):
+        assert button.isVisible()
+        assert button.width() >= 80
+        assert button.height() > 0
+
+
+def test_frozen_webmcp_only_offers_bundled_relay(qtbot, monkeypatch):
+    import ai_navigator
+
+    monkeypatch.setattr(ai_navigator, "FROZEN", True)
+    monkeypatch.setattr(ai_navigator, "WEBMCP_RELAY_SERVER", "/path/that/does/not/exist")
+    monkeypatch.delenv("WEBMCP_ENABLE_FLASK_MODE", raising=False)
+    browser = QWidget()
+    pane = ai_navigator.WebMCPActionsPane(browser)
+    qtbot.addWidget(browser)
+    qtbot.addWidget(pane)
+
+    assert pane.source_combo.count() == 1
+    assert pane.source_combo.currentData() == "stdio"
+    assert pane.source_combo.currentText() == "Bundled relay"
+
+
 def test_webmcp_resize_scrollbar_emits_horizontal_drag_delta(qtbot):
     import ai_navigator
 

@@ -89,7 +89,7 @@ from PySide6.QtWidgets import (
     QScrollBar,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
-from PySide6.QtWebEngineCore import QWebEnginePage
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 
 try:
     from PySide6.QtWebEngineCore import QWebEnginePermission
@@ -363,8 +363,8 @@ class PaneSplitter(QSplitter):
             # Handles are in widget coordinates.  Constrain every divider in
             # both directions so dragging either way leaves at least 10% of
             # the splitter available on each side.
-            usable_width = max(self.width() - self.handleWidth(), 1)
-            minimum = int(usable_width * (1 - self.MAX_SIDE_RATIO))
+            usable_width = max(self.width(), 1)
+            minimum = int(usable_width * (1 - self.MAX_SIDE_RATIO)) + max(0, index - 1) * self.handleWidth()
             pos = min(max(pos, minimum), int(usable_width * self.MAX_SIDE_RATIO))
         super().moveSplitter(pos, index)
 
@@ -824,6 +824,36 @@ class WebMCPRelayAdapter:
                 {"selected_action": action, "parameters": params, "response": response},
             )
             return response
+        # Actions mined from the active page are not part of the relay's
+        # manifest.  They still have everything the webview executor needs,
+        # so construct the same instruction payload locally instead of asking
+        # the relay to look them up by name.
+        if isinstance(action, dict) and str(action.get("source", "")).startswith("current_page"):
+            method = str(action.get("method") or "")
+            payload = {
+                "ok": method in {"click", "setValueAndChange"},
+                "action": action_name,
+                "description": action.get("description"),
+                "method": method,
+                "selector": action.get("selector"),
+                "homepage": action.get("homepage"),
+                "parameters": params,
+                "safety": "navigation must be user-visible",
+                "policy_mode": "current_page_user_initiated",
+            }
+            if method == "click":
+                payload["suggested_browser_instruction"] = (
+                    "Locate the selector in the current page and perform a user-visible click."
+                )
+            elif method == "setValueAndChange":
+                payload["value"] = params.get("value")
+                payload["suggested_browser_instruction"] = (
+                    "Set the provided value and trigger the visible change event."
+                )
+            else:
+                payload["error"] = f"Unsupported WebMCP method: {method}"
+            webmcp_debug_log("adapter.call_action.current_page", payload)
+            return payload
         webmcp_debug_log(
             "adapter.call_action.request",
             {
@@ -1351,7 +1381,13 @@ class BrowserPane(QWidget):
         self.on_capture_request = on_capture_request
 
         self.view = QWebEngineView()
+        self.view.settings().setAttribute(
+            QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True
+        )
         self.view.setPage(DiagnosticWebEnginePage(self.view))
+        self.view.page().settings().setAttribute(
+            QWebEngineSettings.WebAttribute.FullScreenSupportEnabled, True
+        )
         self._pending_webmcp_execution = None
         self._media_permission_api = "none"
         self.setObjectName("workspacePane")
@@ -1375,8 +1411,35 @@ class BrowserPane(QWidget):
         self.capture_selection_button = QPushButton("Capture Selection")
         self.opml_button = QPushButton("Export Outline")
         self.browser_focus_button = QPushButton("Focus Browser")
+        self.video_fullscreen_button = QPushButton("Video Full Screen")
+        self.video_fullscreen_button.setCheckable(True)
+        self.video_fullscreen_button.setVisible(False)
         self.mic_test_button = QPushButton("Test Microphone")
         self.throbber = ThrobberWidget(size=24)
+
+        self.escape_shortcut = QShortcut(QKeySequence(Qt.Key_Escape), self)
+        self.escape_shortcut.activated.connect(self._handle_escape_key)
+
+        self.fullscreen_exit_overlay_button = QPushButton("Exit Fullscreen (Esc)", self)
+        self.fullscreen_exit_overlay_button.setObjectName("fullscreenExitOverlayButton")
+        self.fullscreen_exit_overlay_button.setStyleSheet(
+            "QPushButton#fullscreenExitOverlayButton {"
+            "  background: rgba(24, 58, 90, 0.90);"
+            "  color: #ffffff;"
+            "  border: 1px solid rgba(255, 255, 255, 0.5);"
+            "  border-radius: 6px;"
+            "  padding: 6px 14px;"
+            "  font-weight: 700;"
+            "  font-size: 12px;"
+            "}"
+            "QPushButton#fullscreenExitOverlayButton:hover {"
+            "  background: rgba(47, 93, 168, 0.95);"
+            "}"
+        )
+        self.fullscreen_exit_overlay_button.clicked.connect(
+            lambda: self._set_video_fullscreen(False)
+        )
+        self.fullscreen_exit_overlay_button.hide()
 
         # --- VPN UI ---
         self.vpn = VPNController()
@@ -1419,6 +1482,7 @@ class BrowserPane(QWidget):
             self.opml_button,
             self.browser_focus_button,
             self.mic_test_button,
+            self.video_fullscreen_button,
         ):
             _set_button_role(b, "secondary")
         if self.vpn_button is not None:
@@ -1444,6 +1508,7 @@ class BrowserPane(QWidget):
         utility_row.addWidget(self.opml_button)
         utility_row.addWidget(self.browser_focus_button)
         utility_row.addWidget(self.mic_test_button)
+        utility_row.addWidget(self.video_fullscreen_button)
         utility_row.addStretch(1)
         if self.vpn_button is not None:
             utility_row.addWidget(self.vpn_button)
@@ -1487,12 +1552,22 @@ class BrowserPane(QWidget):
         self.capture_selection_button.clicked.connect(self._capture_selection)
         self.opml_button.clicked.connect(self._export_outline_opml)
         self.browser_focus_button.clicked.connect(self.browserFocusRequested.emit)
+        self.video_fullscreen_button.clicked.connect(self._toggle_video_fullscreen)
         self.mic_test_button.clicked.connect(self._run_microphone_diagnostics)
 
         self._install_media_permission_handler()
         self.view.loadStarted.connect(self._on_load_started)
         self.view.loadProgress.connect(self._on_load_progress)
         self.view.loadFinished.connect(self._on_load_finished)
+        self.view.page().fullScreenRequested.connect(self._handle_web_fullscreen_request)
+        self._video_fullscreen_active = False
+        self._saved_video_toolbar_sizes = None
+        self._saved_video_toolbar_visible = True
+        self._saved_video_status_visible = True
+        self._video_state_timer = QTimer(self)
+        self._video_state_timer.setInterval(500)
+        self._video_state_timer.timeout.connect(self._refresh_video_state)
+        self._video_state_timer.start()
 
         self.vpn_timer = None
         if self.vpn_button is not None:
@@ -1504,8 +1579,164 @@ class BrowserPane(QWidget):
         self.url_bar.setText(self.home_url)
         self.load_url()
 
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._update_overlay_button_position()
+
+    def _update_overlay_button_position(self):
+        if (
+            hasattr(self, "fullscreen_exit_overlay_button")
+            and self.fullscreen_exit_overlay_button is not None
+            and self.fullscreen_exit_overlay_button.isVisible()
+        ):
+            btn_w = self.fullscreen_exit_overlay_button.sizeHint().width() + 16
+            btn_h = self.fullscreen_exit_overlay_button.sizeHint().height() + 4
+            margin = 16
+            self.fullscreen_exit_overlay_button.setGeometry(
+                max(self.width() - btn_w - margin, 0),
+                margin,
+                btn_w,
+                btn_h,
+            )
+            self.fullscreen_exit_overlay_button.raise_()
+
+    def _handle_escape_key(self):
+        if self._video_fullscreen_active:
+            self._set_video_fullscreen(False)
+
     def set_browser_focus_active(self, active: bool):
         self.browser_focus_button.setText("Restore Layout" if active else "Focus Browser")
+
+    def _refresh_video_state(self):
+        """Show the pane control when the page has video elements or active playback."""
+        if self._video_fullscreen_active:
+            return
+        self.view.page().runJavaScript(
+            "document.querySelectorAll('video').length > 0",
+            self._set_video_control_visible,
+        )
+
+    def _set_video_control_visible(self, has_video):
+        if self._video_fullscreen_active:
+            return
+        self.video_fullscreen_button.setVisible(bool(has_video))
+
+    def _handle_web_fullscreen_request(self, request):
+        """Accept HTML video fullscreen requests as pane-local fullscreen."""
+        request.accept()
+        toggle_on = getattr(request, "toggleOn", None)
+        active = bool(toggle_on()) if callable(toggle_on) else not self._video_fullscreen_active
+        self._set_video_fullscreen(active)
+
+    def _toggle_video_fullscreen(self):
+        self._set_video_fullscreen(not self._video_fullscreen_active)
+
+    def _apply_video_fullscreen_js(self, active: bool):
+        """Apply or remove DOM/CSS styling so video zooms to fill the browser pane."""
+        if active:
+            js = """
+            (() => {
+                const video = Array.from(document.querySelectorAll('video')).find(v => !v.paused && !v.ended) || document.querySelector('video');
+                if (!video) return false;
+                try {
+                    const container = video.closest('.html5-video-player, .video-js, [class*="player"]') || video;
+                    if (container.requestFullscreen) {
+                        const p = container.requestFullscreen();
+                        if (p && p.catch) p.catch(() => {});
+                    } else if (video.requestFullscreen) {
+                        const p = video.requestFullscreen();
+                        if (p && p.catch) p.catch(() => {});
+                    }
+                } catch (e) {}
+
+                let styleId = '__ai_nav_video_fs_style__';
+                let style = document.getElementById(styleId);
+                if (!style) {
+                    style = document.createElement('style');
+                    style.id = styleId;
+                    style.textContent = `
+                        .__ai_nav_video_fs_target {
+                            position: fixed !important;
+                            top: 0 !important;
+                            left: 0 !important;
+                            width: 100vw !important;
+                            height: 100vh !important;
+                            max-width: 100vw !important;
+                            max-height: 100vh !important;
+                            z-index: 2147483647 !important;
+                            background: #000000 !important;
+                            object-fit: contain !important;
+                            margin: 0 !important;
+                            padding: 0 !important;
+                        }
+                        html.__ai_nav_video_fs_active, body.__ai_nav_video_fs_active {
+                            overflow: hidden !important;
+                        }
+                    `;
+                    document.head.appendChild(style);
+                }
+                const target = video.closest('.html5-video-player, .video-js') || video;
+                target.classList.add('__ai_nav_video_fs_target');
+                document.documentElement.classList.add('__ai_nav_video_fs_active');
+                if (document.body) {
+                    document.body.classList.add('__ai_nav_video_fs_active');
+                }
+                return true;
+            })()
+            """
+            self.view.page().runJavaScript(js)
+        else:
+            js = """
+            (() => {
+                try {
+                    if (document.fullscreenElement) {
+                        document.exitFullscreen();
+                    }
+                } catch (e) {}
+                document.querySelectorAll('.__ai_nav_video_fs_target').forEach(el => el.classList.remove('__ai_nav_video_fs_target'));
+                document.documentElement.classList.remove('__ai_nav_video_fs_active');
+                if (document.body) {
+                    document.body.classList.remove('__ai_nav_video_fs_active');
+                }
+                return true;
+            })()
+            """
+            self.view.page().runJavaScript(js)
+
+    def _set_video_fullscreen(self, active: bool):
+        if active == self._video_fullscreen_active:
+            return
+        self._video_fullscreen_active = active
+        toolbar = self.top_toolbar_splitter.widget(0)
+        status_child = self.findChild(QLabel, "statusLabel")
+        status = status_child.parentWidget() if status_child is not None else None
+
+        if active:
+            self._saved_video_toolbar_sizes = self.top_toolbar_splitter.sizes()
+            self._saved_video_toolbar_visible = toolbar.isVisible() if toolbar is not None else True
+            self._saved_video_status_visible = status.isVisible() if status is not None else True
+            if toolbar is not None:
+                toolbar.setVisible(False)
+            if status is not None:
+                status.setVisible(False)
+            self.top_toolbar_splitter.setSizes([0, max(self.top_toolbar_splitter.height(), 100)])
+            self.video_fullscreen_button.setChecked(True)
+            self.video_fullscreen_button.setText("Restore Browser")
+            self._apply_video_fullscreen_js(True)
+            self.fullscreen_exit_overlay_button.show()
+            self._update_overlay_button_position()
+        else:
+            self.fullscreen_exit_overlay_button.hide()
+            self._apply_video_fullscreen_js(False)
+            if toolbar is not None:
+                toolbar.setVisible(self._saved_video_toolbar_visible)
+            if status is not None:
+                status.setVisible(self._saved_video_status_visible)
+            if self._saved_video_toolbar_sizes:
+                self.top_toolbar_splitter.setSizes(self._saved_video_toolbar_sizes)
+                self._saved_video_toolbar_sizes = None
+            self.video_fullscreen_button.setChecked(False)
+            self.video_fullscreen_button.setText("Video Full Screen")
 
     def _install_media_permission_handler(self):
         """Install the best microphone/camera permission API available."""
@@ -3214,8 +3445,13 @@ class WebMCPActionsPane(QWidget):
         )
 
         self.source_combo = QComboBox()
-        self.source_combo.addItem("Relay server (stdio)", "stdio")
-        self.source_combo.addItem("Flask relay client", "flask")
+        self.source_combo.addItem(
+            "Bundled relay" if FROZEN else "Relay server (stdio)", "stdio"
+        )
+        # Flask mode requires a separately launched development server. Do
+        # not offer a dead localhost endpoint in the standalone application.
+        if not FROZEN or os.getenv("WEBMCP_ENABLE_FLASK_MODE") == "1":
+            self.source_combo.addItem("Flask relay client", "flask")
 
         self.refresh_button = QPushButton("Refresh Actions")
         self.inspect_button = QPushButton("Preview Payload")
@@ -3244,16 +3480,17 @@ class WebMCPActionsPane(QWidget):
         _set_button_role(self.inspect_button, "secondary")
         _set_button_role(self.execute_button, "primary")
         for button in (self.refresh_button, self.inspect_button, self.execute_button):
-            button.setMinimumWidth(0)
-            button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
+            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
 
-        top_row = QHBoxLayout()
+        top_row = QBoxLayout(QBoxLayout.LeftToRight)
+        self._top_row = top_row
         top_row.addWidget(header_label)
         top_row.addStretch(1)
         top_row.addWidget(self.source_combo)
         top_row.addWidget(self.refresh_button)
 
-        call_row = QHBoxLayout()
+        call_row = QBoxLayout(QBoxLayout.LeftToRight)
+        self._call_row = call_row
         call_row.addWidget(QLabel("Value:"))
         call_row.addWidget(self.param_value, stretch=1)
         call_row.addWidget(self.inspect_button)
@@ -3288,7 +3525,16 @@ class WebMCPActionsPane(QWidget):
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
+        # A horizontal row used to squeeze these controls to zero width when
+        # the packaged app opened with a narrow WebMCP pane.  Stack the rows
+        # before that can happen, keeping every action (especially Run In
+        # Browser) visible and usable at any practical pane width.
+        is_wide = self.width() >= 560
+        direction = QBoxLayout.LeftToRight if is_wide else QBoxLayout.TopToBottom
+        self._top_row.setDirection(direction)
+        self._call_row.setDirection(direction)
         for button in (self.refresh_button, self.inspect_button, self.execute_button):
+            button.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Fixed)
             _fit_button_label(button)
 
 
@@ -3665,7 +3911,10 @@ class MainWindow(QWidget):
             return
         self.browser_mirror_pane = None
         if mirror is not None:
-            self.outer_splitter.removeWidget(mirror)
+            if hasattr(self.outer_splitter, "removeWidget"):
+                self.outer_splitter.removeWidget(mirror)
+            else:
+                mirror.setParent(None)
             mirror.deleteLater()
         self._browser_relocated_for_narrow_webmcp = False
 

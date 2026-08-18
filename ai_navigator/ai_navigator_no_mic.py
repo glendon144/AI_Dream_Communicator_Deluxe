@@ -700,6 +700,34 @@ class WebMCPRelayAdapter:
                 {"selected_action": action, "parameters": params, "response": response},
             )
             return response
+        # Actions mined from the active page are not part of the relay's
+        # manifest. Build their browser instruction locally.
+        if isinstance(action, dict) and str(action.get("source", "")).startswith("current_page"):
+            method = str(action.get("method") or "")
+            payload = {
+                "ok": method in {"click", "setValueAndChange"},
+                "action": action_name,
+                "description": action.get("description"),
+                "method": method,
+                "selector": action.get("selector"),
+                "homepage": action.get("homepage"),
+                "parameters": params,
+                "safety": "navigation must be user-visible",
+                "policy_mode": "current_page_user_initiated",
+            }
+            if method == "click":
+                payload["suggested_browser_instruction"] = (
+                    "Locate the selector in the current page and perform a user-visible click."
+                )
+            elif method == "setValueAndChange":
+                payload["value"] = params.get("value")
+                payload["suggested_browser_instruction"] = (
+                    "Set the provided value and trigger the visible change event."
+                )
+            else:
+                payload["error"] = f"Unsupported WebMCP method: {method}"
+            webmcp_debug_log("adapter.call_action.current_page", payload)
+            return payload
         webmcp_debug_log(
             "adapter.call_action.request",
             {

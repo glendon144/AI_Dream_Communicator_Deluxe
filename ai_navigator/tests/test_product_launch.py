@@ -326,6 +326,7 @@ def test_spec_collects_navigator_and_webmcp_resources():
     spec = (MODULE_DIR.parent / "packaging" / "ai_communicator.spec").read_text()
     assert 'data_tree("ai_navigator")' in spec
     assert 'data_tree("webmcp_relay")' in spec
+    assert '"logging.handlers"' in spec
 
 
 def test_packaged_distribution_dir_resolves_outside_app_bundle(tmp_path):

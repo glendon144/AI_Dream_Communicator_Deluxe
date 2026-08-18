@@ -61,7 +61,12 @@ def make_collect(name: str, script: Path, hiddenimports, datas, app_name: str | 
 navigator_collect = make_collect(
     "ai_navigator",
     ROOT / "ai_navigator" / "ai_navigator.py",
-    ["PySide6.QtWebEngineCore", "PySide6.QtWebEngineWidgets"],
+    [
+        "PySide6.QtWebEngineCore",
+        "PySide6.QtWebEngineWidgets",
+        # Imported dynamically by webmcp_relay/logging_setup.py.
+        "logging.handlers",
+    ],
     data_tree("ai_navigator") + data_tree("webmcp_relay") + [
         (str(QTWEBENGINE_HELPER),
          "PySide6/Qt/lib/QtWebEngineCore.framework/Helpers/QtWebEngineProcess.app"),
