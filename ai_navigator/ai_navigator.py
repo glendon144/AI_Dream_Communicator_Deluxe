@@ -58,10 +58,14 @@ from PySide6.QtGui import (
     QClipboard,
     QKeySequence,
     QShortcut,
+    QFont,
+    QFontMetrics,
+    QTextOption,
 )
 from PySide6.QtWidgets import (
     QApplication,
     QWidget,
+    QBoxLayout,
     QVBoxLayout,
     QHBoxLayout,
     QFrame,
@@ -82,6 +86,7 @@ from PySide6.QtWidgets import (
     QDialog,
     QDialogButtonBox,
     QFileDialog,
+    QScrollBar,
 )
 from PySide6.QtWebEngineWidgets import QWebEngineView
 from PySide6.QtWebEngineCore import QWebEnginePage
@@ -312,6 +317,43 @@ QSplitter::handle:hover {
 VPN_UI_SUPPORTED = sys.platform.startswith("linux")
 
 
+class PaneSplitter(QSplitter):
+    """Keep either side of a horizontal pane splitter from covering >90%."""
+
+    MAX_SIDE_RATIO = 0.90
+
+    def __init__(self, orientation, parent=None):
+        super().__init__(orientation, parent)
+        self._allow_full_collapse = False
+
+    def moveSplitter(self, pos: int, index: int) -> None:
+        if self.orientation() == Qt.Horizontal and not self._allow_full_collapse:
+            # Handles are in widget coordinates.  Constrain every divider in
+            # both directions so dragging either way leaves at least 10% of
+            # the splitter available on each side.
+            usable_width = max(self.width() - self.handleWidth(), 1)
+            minimum = int(usable_width * (1 - self.MAX_SIDE_RATIO))
+            pos = min(max(pos, minimum), int(usable_width * self.MAX_SIDE_RATIO))
+        super().moveSplitter(pos, index)
+
+    def set_sizes_allowing_full_collapse(self, sizes) -> None:
+        self._allow_full_collapse = True
+        try:
+            self.setSizes(sizes)
+        finally:
+            self._allow_full_collapse = False
+
+
+class BrowserPaneSplitter(PaneSplitter):
+    """Outer splitter retaining the browser's focus-mode escape hatch."""
+
+    def moveSplitter(self, pos: int, index: int) -> None:
+        if self.orientation() == Qt.Horizontal and not self._allow_full_collapse:
+            usable_width = max(self.width() - self.handleWidth(), 1)
+            pos = max(pos, int(usable_width * (1 - self.MAX_SIDE_RATIO)))
+        super(PaneSplitter, self).moveSplitter(pos, index)
+
+
 # ---------------------------------------------------------------------------
 # Archive DB helpers (archive_pages)
 # ---------------------------------------------------------------------------
@@ -333,6 +375,22 @@ def _make_section_subtitle(text: str) -> QLabel:
     label.setObjectName("sectionSubtitle")
     label.setWordWrap(True)
     return label
+
+
+def _fit_button_label(button: QPushButton, minimum_point_size: float = 7.0) -> None:
+    """Scale a button's label down just enough to fit its current width."""
+    base_font = button.property("responsiveBaseFont")
+    if base_font is None:
+        base_font = button.font()
+        button.setProperty("responsiveBaseFont", base_font)
+    font = base_font
+    available = max(button.width() - 12, 1)
+    required = max(QFontMetrics(font).horizontalAdvance(button.text()), 1)
+    scale = min(1.0, available / required)
+    font = base_font if scale >= 1.0 else QFont(base_font)
+    if scale < 1.0:
+        font.setPointSizeF(max(minimum_point_size, base_font.pointSizeF() * scale))
+    button.setFont(font)
 
 
 class EnvKeyPromptDialog(QDialog):
@@ -1241,10 +1299,16 @@ class BrowserPane(QWidget):
         self._pending_webmcp_execution = None
         self._media_permission_api = "none"
         self.setObjectName("workspacePane")
+        # The pane itself must be allowed to shrink when the user drags the
+        # outer splitter left.  Its controls can be clipped at that size;
+        # preserving a large toolbar minimum would push the side panes off
+        # screen and make the 90% resize target unreachable.
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         self.url_bar = QLineEdit()
         self.url_bar.setPlaceholderText("Enter a URL or host name")
-        self.url_bar.setMinimumWidth(420)
+        self.url_bar.setMinimumWidth(0)
         self.go_button = QPushButton("Go")
         self.back_button = QPushButton("Back")
         self.fwd_button = QPushButton("Forward")
@@ -1862,6 +1926,8 @@ class ResultsPane(QWidget):
     def __init__(self, db_path: Path):
         super().__init__()
         self.setObjectName("workspacePane")
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
 
         self.db_path = db_path
         self.conn = None
@@ -1892,6 +1958,8 @@ class ResultsPane(QWidget):
             self.funkit_button,
         ):
             _set_button_role(b, "primary")
+            b.setMinimumWidth(0)
+            b.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
 
         layout = QVBoxLayout()
         layout.setContentsMargins(12, 12, 12, 12)
@@ -1901,7 +1969,8 @@ class ResultsPane(QWidget):
         layout.addWidget(subtitle_label)
         layout.addWidget(self.archive_list, stretch=1)
 
-        details_header_row = QHBoxLayout()
+        details_header_row = QBoxLayout(QBoxLayout.LeftToRight)
+        self._details_header_row = details_header_row
         details_header_row.addWidget(details_label)
         details_header_row.addStretch(1)
         details_header_row.addWidget(self.pikit_button)
@@ -1924,6 +1993,25 @@ class ResultsPane(QWidget):
 
         self._ensure_connection()
         self._populate_archive_list()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        is_wide = self.width() >= 520
+        direction = QBoxLayout.LeftToRight if is_wide else QBoxLayout.TopToBottom
+        self._details_header_row.setDirection(direction)
+        # In a horizontal row, retain each button's preferred width so Qt
+        # cannot compress the actions away.  In the stacked narrow layout,
+        # allow the pane itself to honor the user's requested narrow width.
+        policy = QSizePolicy.Preferred if is_wide else QSizePolicy.Ignored
+        for button in (
+            self.pikit_button,
+            self.funkit_button,
+            self.recover_weave_button,
+            self.recover_chat_button,
+            self.recover_button,
+        ):
+            button.setSizePolicy(policy, QSizePolicy.Fixed)
+            _fit_button_label(button)
 
     def _ensure_connection(self):
         if self.conn is None:
@@ -3013,10 +3101,50 @@ class GmailPane(QWidget):
 # ---------------------------------------------------------------------------
 
 
+class WebMCPResizeScrollBar(QScrollBar):
+    """Full-height edge control whose horizontal drag resizes WebMCP."""
+
+    dragged = Signal(int)
+
+    def __init__(self, parent=None):
+        super().__init__(Qt.Vertical, parent)
+        self.setObjectName("webmcpResizeScrollBar")
+        self.setRange(0, 100)
+        self.setPageStep(20)
+        self.setMinimumWidth(14)
+        self.setToolTip("Drag left or right to resize the WebMCP actions pane")
+        self._last_x = None
+
+    def mousePressEvent(self, event):
+        self._last_x = event.position().x()
+        event.accept()
+
+    def mouseMoveEvent(self, event):
+        if self._last_x is not None:
+            x = event.position().x()
+            delta = int(x - self._last_x)
+            if delta:
+                self._last_x = x
+                self.dragged.emit(delta)
+        event.accept()
+
+    def mouseReleaseEvent(self, event):
+        self._last_x = None
+        event.accept()
+
+
 class WebMCPActionsPane(QWidget):
+    resizeRequested = Signal(int)
+
     def __init__(self, browser_pane: BrowserPane):
         super().__init__()
         self.setObjectName("workspacePane")
+        # Keep the actions pane genuinely resizable.  The toolbar and call
+        # controls are allowed to compress/wrap instead of imposing a wide
+        # QWidget minimum that makes the pane consume the available browser
+        # space while it is being dragged narrower.
+        self.setMinimumWidth(0)
+        self.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Preferred)
         self.browser_pane = browser_pane
         self.adapter = WebMCPRelayAdapter()
         self.actions = []
@@ -3052,9 +3180,16 @@ class WebMCPActionsPane(QWidget):
 
         self.payload_view = QTextEdit()
         self.payload_view.setReadOnly(True)
+        self.payload_view.setLineWrapMode(QTextEdit.WidgetWidth)
+        self.payload_view.setWordWrapMode(QTextOption.WrapAnywhere)
+        self.resize_scrollbar = WebMCPResizeScrollBar(self)
+        self.resize_scrollbar.dragged.connect(self.resizeRequested.emit)
         _set_button_role(self.refresh_button, "secondary")
         _set_button_role(self.inspect_button, "secondary")
         _set_button_role(self.execute_button, "primary")
+        for button in (self.refresh_button, self.inspect_button, self.execute_button):
+            button.setMinimumWidth(0)
+            button.setSizePolicy(QSizePolicy.Ignored, QSizePolicy.Fixed)
 
         top_row = QHBoxLayout()
         top_row.addWidget(header_label)
@@ -3068,15 +3203,20 @@ class WebMCPActionsPane(QWidget):
         call_row.addWidget(self.inspect_button)
         call_row.addWidget(self.execute_button)
 
-        layout = QVBoxLayout()
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(8)
-        layout.addLayout(top_row)
-        layout.addWidget(subtitle_label)
-        layout.addWidget(self.actions_list, stretch=1)
-        layout.addLayout(call_row)
-        layout.addWidget(self.payload_view, stretch=2)
-        layout.addWidget(self.status_label)
+        content_layout = QVBoxLayout()
+        content_layout.setSpacing(8)
+        content_layout.addLayout(top_row)
+        content_layout.addWidget(subtitle_label)
+        content_layout.addWidget(self.actions_list, stretch=1)
+        content_layout.addLayout(call_row)
+        content_layout.addWidget(self.payload_view, stretch=2)
+        content_layout.addWidget(self.status_label)
+
+        layout = QHBoxLayout()
+        layout.setContentsMargins(12, 12, 4, 12)
+        layout.setSpacing(4)
+        layout.addLayout(content_layout, stretch=1)
+        layout.addWidget(self.resize_scrollbar)
         self.setLayout(layout)
 
         self.source_combo.currentIndexChanged.connect(self._change_source)
@@ -3089,6 +3229,12 @@ class WebMCPActionsPane(QWidget):
             self.status_label.setText(f"WebMCP relay not found:\n{WEBMCP_RELAY_SERVER}")
         else:
             self.refresh()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        for button in (self.refresh_button, self.inspect_button, self.execute_button):
+            _fit_button_label(button)
+
 
     def _selected_action_name(self) -> str:
         return self.adapter.normalize_action_name(self.selected_action)
@@ -3320,23 +3466,27 @@ class MainWindow(QWidget):
         self._saved_outer_splitter_sizes = None
         self._saved_mid_splitter_sizes = None
         self._saved_mid_visibility = None
+        self._browser_relocated_for_narrow_webmcp = False
+        self.browser_mirror_pane = None
 
         self.results_pane.recoveredPage.connect(self._handle_recovered_page)
         self.results_pane.handoffRequested.connect(self.productHandoffRequested.emit)
         self.memory_pane.openUrlRequested.connect(self.browser_pane.load_from_memory)
         self.browser_pane.browserFocusRequested.connect(self._toggle_browser_focus)
 
-        self.mid_splitter = QSplitter(Qt.Horizontal)
+        self.mid_splitter = PaneSplitter(Qt.Horizontal)
         self.mid_splitter.addWidget(self.results_pane)
         self.mid_splitter.addWidget(self.memory_pane)
         self.mid_splitter.addWidget(self.gmail_pane)
         self.mid_splitter.addWidget(self.webmcp_pane)
-        self.mid_splitter.setSizes([300, 320, 0, 420])
+        # Start WebMCP compact so both browser panes remain visible without
+        # requiring the user to resize the actions pane first.
+        self.mid_splitter.setSizes([300, 320, 0, 300])
         self.gmail_pane.hide()
         for index in range(self.mid_splitter.count()):
             self.mid_splitter.setCollapsible(index, True)
 
-        self.outer_splitter = QSplitter(Qt.Horizontal)
+        self.outer_splitter = BrowserPaneSplitter(Qt.Horizontal)
         self.outer_splitter.addWidget(self.browser_pane)
         self.outer_splitter.addWidget(self.mid_splitter)
         self.outer_splitter.setSizes([900, 700])
@@ -3399,6 +3549,69 @@ class MainWindow(QWidget):
         self.setLayout(main_layout)
         self.outer_splitter.setHandleWidth(8)
         self.mid_splitter.setHandleWidth(8)
+        self.mid_splitter.splitterMoved.connect(self._handle_mid_splitter_moved)
+        self.webmcp_pane.resizeRequested.connect(self._resize_webmcp_from_edge)
+
+    def _resize_webmcp_from_edge(self, delta: int):
+        """Move the WebMCP right edge; a left drag therefore narrows it."""
+        handle = self.mid_splitter.handle(3)
+        if handle is None:
+            return
+        self.mid_splitter.moveSplitter(handle.x() - delta, 3)
+
+    def _handle_mid_splitter_moved(self, _pos: int, _index: int):
+        if not self.webmcp_pane.isVisible():
+            return
+        if self.mid_splitter.widget(3) is not self.webmcp_pane:
+            return
+        mid_width = max(self.mid_splitter.width(), 1)
+        # The requested 60% collapse is measured against the WebMCP pane's
+        # splitter: when it is below 40% of that available width, expose a
+        # browser mirror on the far right.
+        if self.webmcp_pane.width() / mid_width < 0.40:
+            self._relocate_browser_beside_webmcp()
+
+    def _relocate_browser_beside_webmcp(self):
+        if self._browser_relocated_for_narrow_webmcp:
+            return
+        self.browser_mirror_pane = BrowserPane()
+        current_url = self.browser_pane.view.url()
+        if current_url.isValid() and not current_url.isEmpty():
+            self.browser_mirror_pane.view.setUrl(current_url)
+
+        def sync_mirror(url):
+            if self.browser_mirror_pane is not None:
+                self.browser_mirror_pane.view.setUrl(url)
+
+        self._browser_mirror_sync = sync_mirror
+        self.browser_pane.view.urlChanged.connect(sync_mirror)
+        self.outer_splitter.addWidget(self.browser_mirror_pane)
+        total = max(self.outer_splitter.width() - 2 * self.outer_splitter.handleWidth(), 1)
+        self.outer_splitter.setSizes([max(total // 2, 420), max(self.mid_splitter.width(), 220), max(total // 2, 420)])
+        self._browser_relocated_for_narrow_webmcp = True
+
+    def _restore_browser_position(self):
+        if not self._browser_relocated_for_narrow_webmcp:
+            return
+        if getattr(self, "_browser_mirror_sync", None) is not None:
+            try:
+                self.browser_pane.view.urlChanged.disconnect(self._browser_mirror_sync)
+            except (RuntimeError, TypeError):
+                pass
+            self._browser_mirror_sync = None
+        mirror = getattr(self, "browser_mirror_pane", None)
+        # Keep the restoration hook tolerant of lightweight test doubles and
+        # older callers that represented relocation by moving the originals.
+        if mirror is None and not hasattr(self.outer_splitter, "removeWidget"):
+            self.outer_splitter.insertWidget(0, self.browser_pane)
+            self.outer_splitter.insertWidget(1, self.mid_splitter)
+            self._browser_relocated_for_narrow_webmcp = False
+            return
+        self.browser_mirror_pane = None
+        if mirror is not None:
+            self.outer_splitter.removeWidget(mirror)
+            mirror.deleteLater()
+        self._browser_relocated_for_narrow_webmcp = False
 
     def _toggle_browser_focus(self):
         if self._browser_focus_active:
@@ -3409,6 +3622,7 @@ class MainWindow(QWidget):
     def _restore_default_layout(self):
         if self._browser_focus_active:
             self._restore_browser_focus()
+        self._restore_browser_position()
         for i in range(self.mid_splitter.count()):
             self.mid_splitter.widget(i).show()
         self.outer_splitter.setSizes([900, 700])
@@ -3431,7 +3645,7 @@ class MainWindow(QWidget):
         for i in range(self.mid_splitter.count()):
             self.mid_splitter.widget(i).hide()
         self.mid_splitter.setSizes([0] * self.mid_splitter.count())
-        self.outer_splitter.setSizes([browser_width, 0])
+        self.outer_splitter.set_sizes_allowing_full_collapse([browser_width, 0])
         self._browser_focus_active = True
         self.browser_pane.set_browser_focus_active(True)
 
@@ -3456,6 +3670,7 @@ class MainWindow(QWidget):
     def _focus_side_pane(self, pane_index: int):
         if self._browser_focus_active:
             self._restore_browser_focus()
+        self._restore_browser_position()
 
         for i in range(self.mid_splitter.count()):
             self.mid_splitter.widget(i).setVisible(i == pane_index)
@@ -3870,21 +4085,27 @@ class SuiteShell(QWidget):
     panes are ported into this shell.
     """
 
+    SIDEBAR_MAX_WIDTH = 110
+    SIDEBAR_MIN_WIDTH = 72
+
     def __init__(self):
         super().__init__()
 
         self.setWindowTitle("AI Dream Communicator")
-        self.setMinimumSize(QSize(1800, 900))
+        self.setMinimumSize(QSize(900, 600))
         self.product_stack = QStackedWidget()
         self.product_buttons: list[QPushButton] = []
+        self._sidebar_labels: list[str] = []
 
         shell_layout = QHBoxLayout()
         shell_layout.setContentsMargins(0, 0, 0, 0)
         shell_layout.setSpacing(0)
 
         sidebar = QFrame()
+        self.sidebar = sidebar
         sidebar.setObjectName("productSidebar")
-        sidebar.setFixedWidth(220)
+        sidebar.setMinimumWidth(self.SIDEBAR_MIN_WIDTH)
+        sidebar.setMaximumWidth(self.SIDEBAR_MAX_WIDTH)
         sidebar_layout = QVBoxLayout()
         sidebar_layout.setContentsMargins(16, 18, 16, 18)
         sidebar_layout.setSpacing(10)
@@ -3938,9 +4159,33 @@ class SuiteShell(QWidget):
         button = QPushButton(label)
         button.setCheckable(True)
         button.setObjectName("productSidebarButton")
+        button.setToolTip(label)
+        # The selector is intentionally narrow; retain the product names and
+        # let resizeEvent fit them into the rail instead of hiding them behind
+        # abbreviations.
+        compact_font = QFont("Menlo")
+        compact_font.setPointSizeF(9.0)
+        compact_font.setStyleHint(QFont.Monospace)
+        button.setFont(compact_font)
         button.clicked.connect(lambda checked=False, i=index: self._select_product(i))
         self.product_buttons.append(button)
+        self._sidebar_labels.append(label)
         sidebar_layout.addWidget(button)
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        # Keep the product rail usable while the application is made narrow;
+        # the label fitter preserves the full product names at every width.
+        width = max(
+            self.SIDEBAR_MIN_WIDTH,
+            min(self.SIDEBAR_MAX_WIDTH, int(self.width() * 0.16)),
+        )
+        self.sidebar.setFixedWidth(width)
+        for button, label in zip(
+            self.product_buttons, self._sidebar_labels
+        ):
+            button.setText(label)
+            _fit_button_label(button, minimum_point_size=6.5)
 
     def _select_product(self, index: int) -> None:
         self.product_stack.setCurrentIndex(index)

@@ -73,6 +73,33 @@ def test_sidebar_buttons_have_correct_labels(suite_shell):
     assert labels == ["AI Navigator", "PiKit", "FunKit"]
 
 
+def test_sidebar_fits_product_labels_when_window_is_narrow(suite_shell, qtbot):
+    suite_shell.setMinimumSize(0, 0)
+    suite_shell.resize(720, 600)
+    qtbot.wait(50)
+
+    assert suite_shell.sidebar.width() <= suite_shell.SIDEBAR_MAX_WIDTH
+    assert [button.text() for button in suite_shell.product_buttons] == [
+        "AI Navigator",
+        "PiKit",
+        "FunKit",
+    ]
+    assert all(button.width() > 0 for button in suite_shell.product_buttons)
+    assert [button.toolTip() for button in suite_shell.product_buttons] == [
+        "AI Navigator",
+        "PiKit",
+        "FunKit",
+    ]
+
+    suite_shell.resize(1800, 900)
+    qtbot.wait(50)
+    assert [button.text() for button in suite_shell.product_buttons] == [
+        "AI Navigator",
+        "PiKit",
+        "FunKit",
+    ]
+
+
 def test_ai_navigator_is_main_window(suite_shell):
     import ai_navigator
 
@@ -274,4 +301,3 @@ def test_env_key_prompt_dialog_sets_missing_key(monkeypatch):
         assert env is not None
         assert env.value("TEST_PROMPT_KEY") == "secret_key_12345"
         assert os.environ.get("TEST_PROMPT_KEY") == "secret_key_12345"
-
