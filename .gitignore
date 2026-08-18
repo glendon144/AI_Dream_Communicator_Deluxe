@@ -46,6 +46,7 @@ FunKit/src/
 *.log
 logs/
 .cache/
+.pyinstaller/
 .pytest_cache/
 
 # TLS key material (never commit)
