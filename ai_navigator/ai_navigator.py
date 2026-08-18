@@ -107,25 +107,47 @@ from capture_store import (
     save_capture,
 )
 
-init_db_if_needed()
-
 # ---------------------------------------------------------------------------
 # Paths
 # ---------------------------------------------------------------------------
 
+FROZEN = bool(getattr(sys, "frozen", False))
+RUNTIME_RESOURCE_DIR = Path(
+    getattr(sys, "_MEIPASS", Path(__file__).resolve().parent.parent)
+).resolve()
+
+
+def _packaged_distribution_dir(executable: Path | None = None) -> Path:
+    """Return the directory containing the app bundle and sidecar folders."""
+    executable = (executable or Path(sys.executable)).resolve()
+    # .../Product.app/Contents/MacOS/product -> directory containing Product.app
+    if executable.parent.name == "MacOS" and executable.parent.parent.name == "Contents":
+        return executable.parents[3]
+    return executable.parent
+
+
+if FROZEN:
+    USER_DATA_DIR = (
+        Path.home() / "Library" / "Application Support" / "AI Dream Communicator"
+    )
+else:
+    USER_DATA_DIR = Path.cwd()
+
 # Main archive DB (unchanged)
-DB_PATH = Path("storage") / "search_time_machine.db"
-DEFAULT_OPML_PATH = "archive_export.opml"
+DB_PATH = USER_DATA_DIR / "storage" / "search_time_machine.db"
+DEFAULT_OPML_PATH = str(USER_DATA_DIR / "archive_export.opml")
 
 # Separate memory DB (M1)
-MEMORY_DB_PATH = Path("memory.db")
+MEMORY_DB_PATH = USER_DATA_DIR / "memory.db"
+
+init_db_if_needed(DB_PATH)
 
 K_WEAVE = 3  # Recover Memory Weave count
 QT_WEBENGINE_SETHTML_LIMIT_BYTES = 2 * 1024 * 1024
 WEBMCP_RELAY_ROOT = Path(
     os.getenv(
         "WEBMCP_RELAY_ROOT",
-        str(Path(__file__).resolve().parent.parent / "webmcp_relay"),
+        str(RUNTIME_RESOURCE_DIR / "webmcp_relay"),
     )
 ).expanduser()
 WEBMCP_RELAY_SERVER = str(
@@ -142,15 +164,20 @@ WEBMCP_CLIENT_MODULE = str(
     ).expanduser()
 )
 WEBMCP_FLASK_BASE_URL = os.getenv("WEBMCP_FLASK_BASE_URL", "http://127.0.0.1:5054")
-APP_DIR = Path(__file__).resolve().parent
-SUITE_DIR = APP_DIR.parent
+APP_DIR = RUNTIME_RESOURCE_DIR / "ai_navigator" if FROZEN else Path(__file__).resolve().parent
+SUITE_DIR = _packaged_distribution_dir() if FROZEN else APP_DIR.parent
 
 
 def _resolve_pikit_root() -> Path:
     env_path = os.getenv("PIKIT_ROOT")
     if env_path:
         return Path(env_path).expanduser()
-    for candidate in (SUITE_DIR / "PiKit", SUITE_DIR / "PiKit-main"):
+    candidates = (
+        SUITE_DIR / "pikit" / "_internal" / "PiKit",
+        SUITE_DIR / "PiKit",
+        SUITE_DIR / "PiKit-main",
+    )
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     return SUITE_DIR / "PiKit"
@@ -160,7 +187,12 @@ def _resolve_funkit_root() -> Path:
     env_path = os.getenv("FUNKIT_ROOT")
     if env_path:
         return Path(env_path).expanduser()
-    for candidate in (SUITE_DIR / "FunKit", SUITE_DIR / "funkit-main"):
+    candidates = (
+        SUITE_DIR / "funkit" / "_internal" / "FunKit",
+        SUITE_DIR / "FunKit",
+        SUITE_DIR / "funkit-main",
+    )
+    for candidate in candidates:
         if candidate.exists():
             return candidate
     return SUITE_DIR / "FunKit"
@@ -746,6 +778,7 @@ class WebMCPRelayAdapter:
     def __init__(self, source_mode: str = "stdio"):
         self.source_mode = source_mode
         self._client_class = _load_webmcp_client_class()
+        self._in_process_relay = None
 
     def set_source_mode(self, source_mode: str):
         self.source_mode = source_mode
@@ -814,6 +847,12 @@ class WebMCPRelayAdapter:
         return response
 
     def _client_or_stdio_call(self, tool_name: str, arguments: dict) -> dict:
+        # A frozen executable is not a Python interpreter. Running
+        # ``[sys.executable, server.py]`` would start another complete
+        # ai_navigator, whose startup WebMCP refresh would do the same again.
+        if FROZEN:
+            return self._in_process_call(tool_name, arguments)
+
         if tool_name in {"webmcp_get_action", "webmcp_call_action"}:
             if tool_name == "webmcp_call_action":
                 action_name = self.normalize_action_name(
@@ -858,6 +897,23 @@ class WebMCPRelayAdapter:
             except Exception as exc:
                 return {"ok": False, "error": str(exc), "source_mode": "stdio"}
         return self._stdio_rpc(tool_name, arguments)
+
+    def _in_process_call(self, tool_name: str, arguments: dict) -> dict:
+        try:
+            if self._in_process_relay is None:
+                relay_dir = Path(WEBMCP_RELAY_SERVER).resolve().parent
+                relay_dir_text = str(relay_dir)
+                if relay_dir_text not in sys.path:
+                    sys.path.insert(0, relay_dir_text)
+                from relay_core import WebMCPRelay
+
+                self._in_process_relay = WebMCPRelay()
+            return self._in_process_relay.call_tool(tool_name, arguments)
+        except Exception as exc:
+            return {
+                "ok": False,
+                "error": f"In-process WebMCP relay failed: {exc}",
+            }
 
     def _stdio_rpc(self, tool_name: str, arguments: dict) -> dict:
         server_path = Path(WEBMCP_RELAY_SERVER)
@@ -3799,9 +3855,11 @@ class ProductLauncherPane(QWidget):
         self.setLayout(layout)
 
     def _python_executable(self) -> Path:
-        if getattr(sys, "frozen", False):
+        if FROZEN:
             packaged_name = "pikit" if self.title == "PiKit" else "funkit"
-            packaged_executable = Path(sys.executable).resolve().parent.parent / packaged_name / packaged_name
+            packaged_executable = (
+                _packaged_distribution_dir() / packaged_name / packaged_name
+            )
             if packaged_executable.exists():
                 return packaged_executable
         suite_python = Path.home() / ".venvs" / "ai_communicator" / "bin" / "python"
@@ -3840,7 +3898,7 @@ class ProductLauncherPane(QWidget):
         return []
 
     def _ensure_runtime_dependencies(self, python_exe: Path) -> bool:
-        if self.title != "FunKit":
+        if self.title != "FunKit" or FROZEN:
             return True
 
         try:
@@ -3957,7 +4015,7 @@ class ProductLauncherPane(QWidget):
             return
 
         entrypoint = self.root_path / "main.py"
-        packaged = getattr(sys, "frozen", False)
+        packaged = FROZEN
         if not packaged and not entrypoint.exists():
             self.status_label.setText(f"Missing entrypoint: {entrypoint}")
             return
@@ -3976,7 +4034,9 @@ class ProductLauncherPane(QWidget):
 
         self.output_view.clear()
         self.process = QProcess(self)
-        self.process.setWorkingDirectory(str(Path.home()))
+        self.process.setWorkingDirectory(
+            str(Path.home() if packaged else self.root_path)
+        )
         self.process.setProcessEnvironment(launch_env)
         self.process.setProgram(str(python_exe))
         self.process.setArguments([] if packaged else [str(entrypoint)])

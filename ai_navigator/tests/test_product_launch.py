@@ -278,6 +278,82 @@ def test_vertical_menu_launches_funkit_pane_and_triggers_process(suite_shell, qt
         mock_process.start.assert_called_once()
 
 
+@pytest.mark.parametrize(
+    ("pane_index", "product_name"),
+    [(1, "pikit"), (2, "funkit")],
+)
+def test_packaged_applications_menu_launches_bundled_sidecar(
+    suite_shell, qtbot, monkeypatch, tmp_path, pane_index, product_name
+):
+    """The menu must target a sidecar beside the .app, not inside Contents."""
+    import ai_navigator
+
+    distribution = tmp_path / "dist"
+    app_executable = (
+        distribution
+        / "ai_dream_communicator_deluxe.app"
+        / "Contents"
+        / "MacOS"
+        / "ai_navigator"
+    )
+    sidecar_executable = distribution / product_name / product_name
+    app_executable.parent.mkdir(parents=True)
+    app_executable.touch()
+    sidecar_executable.parent.mkdir(parents=True)
+    sidecar_executable.touch()
+
+    monkeypatch.setattr(ai_navigator, "FROZEN", True)
+    monkeypatch.setattr(ai_navigator.sys, "executable", str(app_executable))
+
+    pane = suite_shell.product_stack.widget(pane_index)
+    pane._ensure_runtime_dependencies = MagicMock(return_value=True)
+    pane._ensure_launch_environment = MagicMock(return_value=MagicMock())
+
+    with patch("ai_navigator.QProcess") as mock_qprocess:
+        process = MagicMock()
+        process.state.return_value = ai_navigator.QProcess.NotRunning
+        mock_qprocess.return_value = process
+
+        _click_sidebar_button(qtbot, suite_shell, pane_index)
+        pane.launch_button.click()
+
+        process.setProgram.assert_called_once_with(str(sidecar_executable))
+        process.setArguments.assert_called_once_with([])
+        process.start.assert_called_once()
+
+
+def test_spec_collects_navigator_and_webmcp_resources():
+    spec = (MODULE_DIR.parent / "packaging" / "ai_communicator.spec").read_text()
+    assert 'data_tree("ai_navigator")' in spec
+    assert 'data_tree("webmcp_relay")' in spec
+
+
+def test_packaged_distribution_dir_resolves_outside_app_bundle(tmp_path):
+    import ai_navigator
+
+    executable = (
+        tmp_path / "AI.app" / "Contents" / "MacOS" / "ai_navigator"
+    )
+    assert ai_navigator._packaged_distribution_dir(executable) == tmp_path
+
+
+def test_frozen_webmcp_refresh_never_respawns_navigator(monkeypatch):
+    import ai_navigator
+
+    relay = MagicMock()
+    relay.call_tool.return_value = {"ok": True, "actions": []}
+    adapter = ai_navigator.WebMCPRelayAdapter()
+    adapter._in_process_relay = relay
+    monkeypatch.setattr(ai_navigator, "FROZEN", True)
+
+    with patch("ai_navigator.subprocess.run") as run:
+        result = adapter._client_or_stdio_call("webmcp_list_actions", {})
+
+    assert result == {"ok": True, "actions": []}
+    relay.call_tool.assert_called_once_with("webmcp_list_actions", {})
+    run.assert_not_called()
+
+
 def test_env_key_prompt_dialog_sets_missing_key(monkeypatch):
     import os
     import ai_navigator
