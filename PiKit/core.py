@@ -18,6 +18,9 @@ correctness does not depend on the process working directory.
 
 from __future__ import annotations
 
+import queue
+import socket
+import threading
 from pathlib import Path
 from typing import Any, Callable
 
@@ -266,6 +269,245 @@ class PiKitCore:
         )
 
     # ------------------------------------------------------------------
+    # Export / save-as-text
+    # ------------------------------------------------------------------
+
+    def document_to_plain_text(self, doc_id: int) -> tuple[str, str]:
+        """Return ``(title, plain_text)`` for a document.
+
+        Composes the GUI-free text-extraction helpers from the save-as-text
+        plugin (OPML flattening, binary decode) so the Qt pane only needs a
+        file dialog and a write.
+        """
+        doc = self.doc_store.get_document(doc_id)
+        if not doc:
+            raise ValueError(f"Document {doc_id} not found")
+        try:
+            from modules.save_as_text_plugin_v3 import (
+                _doc_tuple,
+                _flatten_opml_to_text,
+                _is_opml_text,
+            )
+        except ImportError:
+            from .modules.save_as_text_plugin_v3 import (
+                _doc_tuple,
+                _flatten_opml_to_text,
+                _is_opml_text,
+            )
+        _doc_id, title, body = _doc_tuple(doc)
+        if isinstance(body, (bytes, bytearray)):
+            body = bytes(body).decode("utf-8", errors="replace")
+        text = str(body or "").strip()
+        if _is_opml_text(text):
+            text = _flatten_opml_to_text(text)
+        return str(title or "Document"), text
+
+    def export_document_to_path(self, doc_id: int, path: Path | str) -> None:
+        """Export the raw document body to a filesystem path (business logic)."""
+        self.processor.export_document_to_path(doc_id, str(path))
+
+    # ------------------------------------------------------------------
+    # OPML actions (business conversions via the GUI-free aopmlengine)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _aopmlengine():
+        try:
+            from modules import aopmlengine
+        except ImportError:
+            from .modules import aopmlengine
+        return aopmlengine
+
+    def convert_document_to_opml(self, doc_id: int) -> int:
+        """Convert a document body to OPML and store it as a new document."""
+        doc = self.doc_store.get_document(doc_id)
+        if not doc:
+            raise ValueError(f"Document {doc_id} not found")
+        title = str(doc["title"] or "Document")
+        body = doc["body"]
+        xml = self._aopmlengine().convert_payload_to_opml(title, body)
+        return int(self.doc_store.add_document(f"{title} (OPML)", xml))
+
+    def batch_convert_documents_to_opml(self, doc_ids: list[int]) -> tuple[int, int]:
+        """Convert each document id to OPML; return (converted, failed)."""
+        converted = 0
+        failed = 0
+        for doc_id in doc_ids:
+            try:
+                self.convert_document_to_opml(int(doc_id))
+                converted += 1
+            except Exception:
+                failed += 1
+        return converted, failed
+
+    def import_url_as_opml(self, url: str, timeout: int = 25) -> int:
+        """Fetch a URL, convert its content to OPML, and store a new document."""
+        import urllib.request
+
+        with urllib.request.urlopen(url, timeout=timeout) as resp:
+            data = resp.read()
+        xml = self._aopmlengine().convert_payload_to_opml(url, data)
+        return int(self.doc_store.add_document(f"{url} (OPML)", xml))
+
+    def crawl_opml(self, start: str, max_depth: int = 2) -> list[int]:
+        """Crawl an OPML seed (URL or path) and import linked OPML documents."""
+        return list(self.processor.crawl_opml_and_import(start, max_depth=max_depth))
+
+    # ------------------------------------------------------------------
+    # Document transfer listener (socket handling stays out of the UI loop)
+    # ------------------------------------------------------------------
+
+    def _document_transfer(self):
+        try:
+            from modules import document_transfer
+        except ImportError:
+            from .modules import document_transfer
+        return document_transfer
+
+    def start_transfer_listener(
+        self,
+        on_incoming: Callable[[dict[str, Any], "queue.Queue"], None] | None = None,
+        port: int | None = None,
+    ) -> int | None:
+        """Start the incoming-document socket listener on a daemon thread.
+
+        ``on_incoming(invite, response_queue)`` is invoked on the listener
+        thread for each invitation; the view marshals the prompt to its UI
+        thread and puts the JSON response into ``response_queue``.  Returns
+        the bound port, or None if the listener is already running or the
+        socket cannot bind.
+        """
+        if getattr(self, "_transfer_server", None) is not None:
+            return None
+        transfer = self._document_transfer()
+        try:
+            if callable(transfer.ensure_local_tls_material):
+                transfer.ensure_local_tls_material(
+                    self.storage_dir / "pikit.crt", self.storage_dir / "pikit.key"
+                )
+            ssl_ctx = transfer.create_server_ssl_context(
+                self.storage_dir / "pikit.crt", self.storage_dir / "pikit.key"
+            )
+            listener = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+            listener.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            listener.bind(
+                ("0.0.0.0", port if port is not None else transfer.DEFAULT_TRANSFER_PORT)
+            )
+            listener.listen(5)
+            listener.settimeout(1.0)
+        except Exception as exc:
+            self.report_status(f"Transfer listener failed to start: {exc}")
+            return None
+        self._transfer_server = listener
+        self._transfer_ssl_context = ssl_ctx
+        self._transfer_stop = threading.Event()
+        self._transfer_on_incoming = on_incoming
+        thread = threading.Thread(target=self._transfer_accept_loop, daemon=True)
+        thread.start()
+        bound_port = int(listener.getsockname()[1])
+        self.report_status(f"Transfer listener on port {bound_port}.")
+        return bound_port
+
+    def stop_transfer_listener(self) -> None:
+        listener = getattr(self, "_transfer_server", None)
+        self._transfer_stop = threading.Event()
+        if listener is not None:
+            self._transfer_stop.set()
+            try:
+                listener.close()
+            except Exception:
+                pass
+        self._transfer_server = None
+
+    def _transfer_accept_loop(self) -> None:
+        listener = self._transfer_server
+        while listener is not None and not self._transfer_stop.is_set():
+            try:
+                conn, _addr = listener.accept()
+            except socket.timeout:
+                continue
+            except OSError:
+                break
+            threading.Thread(
+                target=self._transfer_handle_connection,
+                args=(conn,),
+                daemon=True,
+            ).start()
+
+    def _transfer_handle_connection(self, conn) -> None:
+        transfer = self._document_transfer()
+        try:
+            with conn:
+                with self._transfer_ssl_context.wrap_socket(conn, server_side=True) as tls_sock:
+                    invite = transfer.read_json_line(tls_sock)
+                    response_queue: "queue.Queue[dict[str, Any]]" = queue.Queue(maxsize=1)
+                    if self._transfer_on_incoming is not None:
+                        try:
+                            self._transfer_on_incoming(invite, response_queue)
+                        except Exception as exc:
+                            response_queue.put(
+                                {"status": "error", "message": f"View handler failed: {exc}"}
+                            )
+                    else:
+                        response_queue.put(
+                            {"status": "rejected", "message": "No view handler registered."}
+                        )
+                    response = response_queue.get()
+                    transfer.write_json_line(tls_sock, response)
+        except Exception as exc:
+            self.report_status(f"Incoming transfer failed: {exc}")
+
+    def accept_incoming_document(self, invite: dict[str, Any]) -> int:
+        """Fetch and import a shared document invitation (business logic)."""
+        transfer = self._document_transfer()
+        if not callable(transfer.fetch_shared_document):
+            raise RuntimeError("Share download support is unavailable.")
+        share_url = str(invite.get("share_url") or "")
+        if not share_url:
+            raise RuntimeError("Invitation has no share URL.")
+        shared_payload = transfer.fetch_shared_document(share_url)
+        return int(self.processor.import_shared_document(shared_payload))
+
+    # ------------------------------------------------------------------
+    # Async ASK (non-blocking; worker-owned SQLite connections)
+    # ------------------------------------------------------------------
+
+    def ask_question_async(
+        self,
+        prompt: str,
+        on_done: Callable[[str | None, BaseException | None], None],
+    ) -> None:
+        """Run ASK off the calling thread and return the pure reply via callback.
+
+        Thread-safety design: the command processor's memory preamble and
+        breadcrumbs touch the document-store connection, which is
+        main-thread-affine.  The worker therefore opens its OWN DocumentStore
+        on the same db file and builds a fresh CommandProcessor over it
+        (sharing the AI client); no SQLite connection is shared across
+        threads, and only the reply string (or error) crosses back through
+        ``on_done``, which the view marshals to its UI thread.
+        """
+        def _run() -> None:
+            worker_store: DocumentStore | None = None
+            try:
+                worker_store = DocumentStore(str(self.db_path))
+                worker_processor = CommandProcessor(worker_store, self.ai)
+                if hasattr(worker_processor, "set_dream_handler"):
+                    worker_processor.set_dream_handler(self._on_dream_event)
+                reply = worker_processor.ask_question(prompt)
+                on_done(reply, None)
+            except Exception as exc:
+                on_done(None, exc)
+            finally:
+                if worker_store is not None:
+                    try:
+                        worker_store.conn.close()
+                    except Exception:
+                        pass
+
+        threading.Thread(target=_run, daemon=True).start()
+
+    # ------------------------------------------------------------------
     # Status + lifecycle
     # ------------------------------------------------------------------
 
@@ -273,7 +515,8 @@ class PiKitCore:
         self.status_callback(message)
 
     def shutdown(self) -> None:
-        """Stop background work (Dream worker thread)."""
+        """Stop background work (Dream worker thread, transfer listener)."""
+        self.stop_transfer_listener()
         if self.dream_processor and hasattr(self.dream_processor, "stop"):
             try:
                 self.dream_processor.stop()

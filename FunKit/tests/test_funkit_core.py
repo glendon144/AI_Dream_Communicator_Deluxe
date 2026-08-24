@@ -236,3 +236,272 @@ def test_gui_archive_memory_delegates_to_core(tmp_path):
     assert kwargs["publish_to_dream"] is True
     assert kwargs["publish_to_openbrain"] is False
     assert kwargs["ttl_seconds"] is None
+
+
+# ---------------------------------------------------------------------------
+# $ command handling (run_command parity with the Tk built-in command set)
+# ---------------------------------------------------------------------------
+
+
+def test_run_command_help_lists_commands(tmp_path):
+    core = _core(tmp_path)
+    result = core.run_command("$ HELP")
+    assert result.handled is True
+    assert result.output_title == "$ HELP"
+    assert "NEW <title>" in result.output
+    assert "SUMMARIZE <id>" in result.output
+
+
+def test_run_command_new_creates_document(tmp_path):
+    core = _core(tmp_path)
+    result = core.run_command("$ NEW Hello World")
+    assert result.handled is True
+    assert result.reveal_doc_id is not None
+    doc = core.doc_store.get_document(result.reveal_doc_id)
+    assert doc["title"] == "Hello World"
+    assert doc["body"] == ""
+
+
+def test_run_command_list_outputs_index(tmp_path):
+    core = _core(tmp_path)
+    core.doc_store.add_document("Alpha", "body")
+    result = core.run_command("$ LIST")
+    assert result.handled is True
+    assert "Alpha" in result.output
+
+
+def test_run_command_view_reveals_or_reports_missing(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "body")
+    assert core.run_command(f"$ VIEW {doc_id}").reveal_doc_id == doc_id
+    missing = core.run_command("$ VIEW 9999")
+    assert missing.handled is True
+    assert "not found" in missing.output
+
+
+def test_run_command_edit_requires_input_then_appends(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "start")
+    first = core.run_command(f"$ EDIT {doc_id}")
+    assert first.needs_input is True
+    assert first.input_doc_id == doc_id
+    second = core.run_command(f"$ EDIT {doc_id}", extra_text="more")
+    assert second.reveal_doc_id == doc_id
+    # Matches the Tk app's separator behavior: body + "\n" + extra.
+    assert core.doc_store.get_document(doc_id)["body"] == "start\nmore"
+
+
+def test_run_command_delete_removes_document(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "body")
+    result = core.run_command(f"$ DELETE {doc_id}")
+    assert result.handled is True
+    assert core.doc_store.get_document(doc_id) is None
+
+
+def test_run_command_save_writes_file(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "file body")
+    out = tmp_path / "out.txt"
+    result = core.run_command(f"$ SAVE {doc_id} {out}")
+    assert result.handled is True
+    assert out.read_text(encoding="utf-8") == "file body"
+
+
+def test_run_command_load_imports_file(tmp_path):
+    core = _core(tmp_path)
+    src = tmp_path / "import.txt"
+    src.write_text("imported content", encoding="utf-8")
+    result = core.run_command(f"$ LOAD {src}")
+    assert result.handled is True
+    doc = core.doc_store.get_document(result.reveal_doc_id)
+    assert doc["title"] == "import.txt"
+    assert doc["body"] == "imported content"
+
+
+def test_run_command_ask_delegates_to_processor(tmp_path):
+    from unittest.mock import MagicMock
+
+    core = _core(tmp_path)
+    core.processor.ask_question = MagicMock(return_value="the reply")
+    result = core.run_command("$ ASK What is this?")
+    assert result.handled is True
+    assert result.output == "the reply"
+    core.processor.ask_question.assert_called_once_with("What is this?")
+
+
+def test_run_command_summarize_delegates_to_processor(tmp_path):
+    from unittest.mock import MagicMock
+
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "long body to summarize")
+    core.processor.ask_question = MagicMock(return_value="summary")
+    result = core.run_command(f"$ SUMMARIZE {doc_id}")
+    assert result.handled is True
+    assert result.output == "summary"
+    assert "long body to summarize" in core.processor.ask_question.call_args.args[0]
+
+
+def test_run_command_unmatched_returns_not_handled(tmp_path):
+    core = _core(tmp_path)
+    result = core.run_command("$ FROBNICATE")
+    assert result.handled is False
+    assert "no handler matched" in result.output
+
+
+# ---------------------------------------------------------------------------
+# Export / save-as-text
+# ---------------------------------------------------------------------------
+
+
+def test_core_document_to_plain_text_plain(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "Hello world body")
+    title, text = core.document_to_plain_text(doc_id)
+    assert title == "Alpha"
+    assert text == "Hello world body"
+
+
+def test_core_document_to_plain_text_flattens_opml(tmp_path):
+    core = _core(tmp_path)
+    xml = (
+        '<?xml version="1.0"?><opml version="2.0"><head><title>T</title></head>'
+        "<body><outline text=\"Root\"><outline text=\"Child\"/></outline></body></opml>"
+    )
+    doc_id = core.doc_store.add_document("Tree", xml)
+    _title, text = core.document_to_plain_text(doc_id)
+    assert "Root" in text
+    assert "Child" in text
+
+
+def test_core_export_document_to_path(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "export body")
+    out = tmp_path / "export.txt"
+    core.export_document_to_path(doc_id, out)
+    assert out.read_text(encoding="utf-8") == "export body"
+
+
+# ---------------------------------------------------------------------------
+# Provider controls + RAG + settings persistence
+# ---------------------------------------------------------------------------
+
+
+def test_core_list_providers_and_selected(tmp_path):
+    core = _core(tmp_path)
+    providers = core.list_providers()
+    assert isinstance(providers, list)
+    keys = {k for k, _ in providers}
+    assert "openai" in keys or "baseten" in keys or "local_llama" in keys
+    assert core.get_selected_provider() in keys or core.get_selected_provider() == "openai"
+
+
+def test_core_set_provider_persists_selection(tmp_path):
+    core = _core(tmp_path)
+    # Pick a provider that exists in the (temp) registry.
+    providers = core.list_providers()
+    assert providers
+    key = providers[0][0]
+    assert core.set_provider(key) is True
+    assert core.settings.get("selected_provider") == key
+    # Persisted to the core's explicit storage dir (not the CWD).
+    app_state = tmp_path / "funkit" / "storage" / "app_state.json"
+    import json as _json
+
+    assert _json.loads(app_state.read_text(encoding="utf-8"))["selected_provider"] == key
+    assert core.get_selected_provider() == key
+
+
+def test_core_set_provider_unknown_returns_false(tmp_path):
+    core = _core(tmp_path)
+    assert core.set_provider("no_such_provider") is False
+
+
+def test_core_rag_toggle_falls_back_to_attr(tmp_path):
+    core = _core(tmp_path)
+    assert core.is_rag_enabled() is False
+    core.set_rag_enabled(True)
+    assert core.is_rag_enabled() is True
+    assert getattr(core.processor, "rag_enabled", None) is True
+
+
+# ---------------------------------------------------------------------------
+# Dream / memory controls
+# ---------------------------------------------------------------------------
+
+
+def test_core_archive_toggles_persist_to_settings(tmp_path):
+    core = _core(tmp_path)
+    core.set_archive_memory_enabled(False)
+    assert core.archive_memory_enabled is False
+    core.set_archive_publish_to_dream(True)
+    assert core.archive_publish_to_dream is True
+    core.set_archive_publish_to_openbrain(True)
+    assert core.archive_publish_to_openbrain is True
+    saved = json.loads((tmp_path / "funkit" / "funkit_settings.json").read_text(encoding="utf-8"))
+    assert saved["archive_memory_enabled"] is False
+    assert saved["archive_publish_to_dream"] is True
+    assert saved["archive_publish_to_openbrain"] is True
+
+
+def test_core_memory_get_set_roundtrip(tmp_path):
+    core = _core(tmp_path)
+    assert core.get_memory("global") == {}
+    core.set_memory({"persona": "succinct", "rules": ["no filler"]}, "global")
+    mem = core.get_memory("global")
+    assert mem["persona"] == "succinct"
+    assert "no filler" in mem["rules"]
+
+
+def test_core_run_dream_pass_via_adapter(tmp_path):
+    modules_dir = FUNKIT_DIR / "modules"
+    if str(modules_dir) not in sys.path:
+        sys.path.insert(0, str(modules_dir))
+    repo_root = FUNKIT_DIR.parent
+    if str(repo_root) not in sys.path:
+        sys.path.insert(0, str(repo_root))
+    _clear_adapter_stubs()
+
+    core = _core(tmp_path)
+    capsule = core.run_dream_pass()
+    assert isinstance(capsule, str)
+    assert "Dream Capsule" in capsule
+
+
+def test_core_run_dream_pass_raises_when_disabled(tmp_path):
+    core = _core(tmp_path)
+    core.archive_memory_enabled = False
+    try:
+        core.run_dream_pass()
+    except RuntimeError:
+        return
+    raise AssertionError("expected RuntimeError when archive memory disabled")
+
+
+# ---------------------------------------------------------------------------
+# Async ASK (worker thread, worker-owned SQLite connections)
+# ---------------------------------------------------------------------------
+
+
+def test_core_ask_question_async_returns_reply(tmp_path):
+    import threading
+    from unittest.mock import MagicMock
+
+    core = _core(tmp_path)
+    core.ai.query = MagicMock(return_value="async reply")
+    core.ai.last_finish_reason = None
+    done = threading.Event()
+    outcome: dict = {}
+
+    def on_done(reply, error):
+        outcome["reply"] = reply
+        outcome["error"] = error
+        done.set()
+
+    core.ask_question_async("hello", on_done)
+    assert done.wait(timeout=10) is True
+    assert outcome["reply"] == "async reply"
+    assert outcome["error"] is None
+    core.ai.query.assert_called()
+    core.doc_store.add_document("After", "still works")
+    assert len(core.doc_store.get_document_index()) == 1

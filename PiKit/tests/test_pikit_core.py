@@ -222,3 +222,192 @@ def test_gui_on_close_shuts_down_core(tmp_path):
     DemoKitGUI._on_close.__get__(fake, type(fake))()
     assert core.dream_processor._running is False
     fake.destroy.assert_called_once()
+
+
+# ---------------------------------------------------------------------------
+# Export / save-as-text
+# ---------------------------------------------------------------------------
+
+
+def test_core_document_to_plain_text_plain(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "Hello world body")
+    title, text = core.document_to_plain_text(doc_id)
+    assert title == "Alpha"
+    assert text == "Hello world body"
+
+
+def test_core_document_to_plain_text_flattens_opml(tmp_path):
+    core = _core(tmp_path)
+    xml = (
+        '<?xml version="1.0"?><opml version="2.0"><head><title>T</title></head>'
+        "<body><outline text=\"Root\"><outline text=\"Child\"/></outline></body></opml>"
+    )
+    doc_id = core.doc_store.add_document("Tree", xml)
+    _title, text = core.document_to_plain_text(doc_id)
+    assert "Root" in text
+    assert "Child" in text
+
+
+def test_core_document_to_plain_text_binary_decodes(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Bin", b"binary\x00content".decode("latin1").encode("latin1"))
+    _title, text = core.document_to_plain_text(doc_id)
+    assert "content" in text
+
+
+def test_core_export_document_to_path(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "export body")
+    out = tmp_path / "export.txt"
+    core.export_document_to_path(doc_id, out)
+    assert out.read_text(encoding="utf-8") == "export body"
+
+
+# ---------------------------------------------------------------------------
+# OPML actions
+# ---------------------------------------------------------------------------
+
+
+def test_core_convert_document_to_opml(tmp_path):
+    core = _core(tmp_path)
+    doc_id = core.doc_store.add_document("Alpha", "plain text body")
+    new_id = core.convert_document_to_opml(doc_id)
+    doc = core.doc_store.get_document(new_id)
+    assert doc["title"] == "Alpha (OPML)"
+    assert "<opml" in str(doc["body"]).lower()
+
+
+def test_core_batch_convert_documents_to_opml(tmp_path):
+    core = _core(tmp_path)
+    ids = [
+        core.doc_store.add_document("A", "text a"),
+        core.doc_store.add_document("B", "text b"),
+    ]
+    converted, failed = core.batch_convert_documents_to_opml(ids)
+    assert converted == 2
+    assert failed == 0
+    index = core.doc_store.get_document_index()
+    assert sum(1 for d in index if "(OPML)" in str(d["title"])) == 2
+
+
+def test_core_batch_convert_counts_failures(tmp_path):
+    core = _core(tmp_path)
+    good = core.doc_store.add_document("A", "text a")
+    converted, failed = core.batch_convert_documents_to_opml([good, 99999])
+    assert converted == 1
+    assert failed == 1
+
+
+# ---------------------------------------------------------------------------
+# Transfer listener
+# ---------------------------------------------------------------------------
+
+
+def test_core_transfer_listener_roundtrip(tmp_path):
+    import socket
+
+    from modules.document_transfer import (
+        create_client_ssl_context,
+        read_json_line,
+        write_json_line,
+    )
+
+    core = _core(tmp_path)
+    received: dict = {}
+
+    def handler(invite, response_queue):
+        received.update(invite)
+        response_queue.put({"status": "accepted", "imported_doc_id": 7})
+
+    port = core.start_transfer_listener(on_incoming=handler, port=0)
+    assert port is not None and port > 0
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=10)
+        with create_client_ssl_context().wrap_socket(
+            sock, server_hostname="localhost"
+        ) as tls:
+            write_json_line(
+                tls,
+                {"sender_name": "tester", "doc_title": "Doc", "share_url": "http://x"},
+            )
+            response = read_json_line(tls)
+        assert response["status"] == "accepted"
+        assert response["imported_doc_id"] == 7
+        assert received.get("doc_title") == "Doc"
+    finally:
+        core.stop_transfer_listener()
+
+
+def test_core_transfer_listener_rejects_without_handler(tmp_path):
+    import socket
+
+    from modules.document_transfer import (
+        create_client_ssl_context,
+        read_json_line,
+        write_json_line,
+    )
+
+    core = _core(tmp_path)
+    port = core.start_transfer_listener(on_incoming=None, port=0)
+    assert port is not None
+    try:
+        sock = socket.create_connection(("127.0.0.1", port), timeout=10)
+        with create_client_ssl_context().wrap_socket(
+            sock, server_hostname="localhost"
+        ) as tls:
+            write_json_line(tls, {"doc_title": "Doc"})
+            response = read_json_line(tls)
+        assert response["status"] == "rejected"
+    finally:
+        core.stop_transfer_listener()
+
+
+# ---------------------------------------------------------------------------
+# Async ASK (worker thread, worker-owned SQLite connections)
+# ---------------------------------------------------------------------------
+
+
+def test_core_ask_question_async_returns_reply(tmp_path):
+    import threading
+    from unittest.mock import MagicMock
+
+    core = _core(tmp_path)
+    core.ai.query = MagicMock(return_value="async reply")
+    done = threading.Event()
+    outcome: dict = {}
+
+    def on_done(reply, error):
+        outcome["reply"] = reply
+        outcome["error"] = error
+        done.set()
+
+    core.ask_question_async("hello", on_done)
+    assert done.wait(timeout=10) is True
+    assert outcome["reply"] == "async reply"
+    assert outcome["error"] is None
+    core.ai.query.assert_called()
+    # The main-thread store connection is untouched and still usable.
+    core.doc_store.add_document("After", "still works")
+    assert len(core.doc_store.get_document_index()) == 1
+
+
+def test_core_ask_question_async_reports_error(tmp_path):
+    import threading
+
+    core = _core(tmp_path)
+    # ask_question itself swallows AI errors (returns None), so exercise the
+    # worker's own exception path: a store that cannot be opened.
+    core.db_path = tmp_path / "missing_dir" / "x.db"
+    done = threading.Event()
+    outcome: dict = {}
+
+    def on_done(reply, error):
+        outcome["reply"] = reply
+        outcome["error"] = error
+        done.set()
+
+    core.ask_question_async("hello", on_done)
+    assert done.wait(timeout=10) is True
+    assert outcome["reply"] is None
+    assert outcome["error"] is not None
