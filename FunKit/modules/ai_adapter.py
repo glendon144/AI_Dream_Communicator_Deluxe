@@ -7,8 +7,13 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, Iterator, Optional
 
-from modules.local_ai_interface import AIInterface as OpenAICompatibleAI
-from modules.provider_registry import ProviderConfig, registry
+# Dual-mode imports (standalone ``modules.*`` vs embedded ``FunKit.modules.*``).
+try:
+    from modules.local_ai_interface import AIInterface as OpenAICompatibleAI
+    from modules.provider_registry import ProviderConfig, registry
+except ImportError:
+    from .local_ai_interface import AIInterface as OpenAICompatibleAI
+    from .provider_registry import ProviderConfig, registry
 
 log = logging.getLogger(__name__)
 

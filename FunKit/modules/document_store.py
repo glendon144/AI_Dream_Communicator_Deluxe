@@ -6,7 +6,10 @@ import sqlite3
 from pathlib import Path
 from typing import Any
 
-from modules.db_migrations import ensure_ai_memory_table
+try:
+    from modules.db_migrations import ensure_ai_memory_table
+except ImportError:  # package-mode embedding (FunKit.modules.document_store)
+    from .db_migrations import ensure_ai_memory_table
 
 
 DEFAULT_DB_PATH = Path("storage") / "documents.db"

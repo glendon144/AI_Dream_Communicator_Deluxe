@@ -1,5 +1,8 @@
 import sqlite3
-from modules.db_migrations import ensure_ai_memory_table
+try:
+    from modules.db_migrations import ensure_ai_memory_table
+except ImportError:  # package-mode embedding (PiKit.modules.document_store)
+    from .db_migrations import ensure_ai_memory_table
 
 class DocumentStore:
     def __init__(self, db_path):

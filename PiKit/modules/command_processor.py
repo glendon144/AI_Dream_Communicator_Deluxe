@@ -9,12 +9,23 @@ import time
 from pathlib import Path
 from typing import Any, Tuple, Callable
 
-from modules.logger import Logger
-from modules.document_store import DocumentStore
-from modules.document_transfer import DEFAULT_FLASK_PORT
-from modules.directory_import import import_text_files_from_directory
-from modules.ai_memory import get_memory, set_memory
-from modules.text_sanitizer import sanitize_ai_reply
+# Dual-mode imports: standalone runs resolve the top-level ``modules`` package
+# (PiKit dir on sys.path); in-process embedding imports this as
+# ``PiKit.modules.command_processor``, where relative imports are required.
+try:
+    from modules.logger import Logger
+    from modules.document_store import DocumentStore
+    from modules.document_transfer import DEFAULT_FLASK_PORT
+    from modules.directory_import import import_text_files_from_directory
+    from modules.ai_memory import get_memory, set_memory
+    from modules.text_sanitizer import sanitize_ai_reply
+except ImportError:
+    from .logger import Logger
+    from .document_store import DocumentStore
+    from .document_transfer import DEFAULT_FLASK_PORT
+    from .directory_import import import_text_files_from_directory
+    from .ai_memory import get_memory, set_memory
+    from .text_sanitizer import sanitize_ai_reply
 
 # ------------ Config (env-tunable) ------------
 SHORT_THRESHOLD_TOKENS = int(os.getenv("PIKIT_SHORT_THRESHOLD_TOKENS", "200"))
@@ -700,6 +711,8 @@ def crawl_opml_and_import(self, start: str, max_depth: int = 2) -> list[int]:
     """
     try:
         from modules.opml_crawler_adapter import crawl_opml
+    except ImportError:
+        from .opml_crawler_adapter import crawl_opml
     except Exception as e:
         raise RuntimeError(f"OPML crawler not available: {e}")
 

@@ -250,6 +250,7 @@ def _make_preview(title: str, content: Any) -> str:
 
 class App(tk.Tk):
     def __init__(self, *args, **kwargs):
+        core = kwargs.pop("core", None)
         doc_store_pos = args[0] if len(args) >= 1 else None
         processor_pos = args[1] if len(args) >= 2 else None
 
@@ -281,6 +282,18 @@ class App(tk.Tk):
         self.dream_enabled = False
         self.dream_processor = None
         self.dream_db_path = Path("storage") / "dreams.db"
+        # When constructed over a PiKitCore, the core owns the business
+        # objects and Dream lifecycle; the GUI only renders them.
+        self.core = core
+        if core is not None:
+            if core.doc_store is not None:
+                self.doc_store = core.doc_store
+            if core.processor is not None:
+                self.processor = core.processor
+                self.logger = getattr(self.processor, "logger", self.logger)
+            self.dream_processor = getattr(core, "dream_processor", None)
+            self.dream_enabled = bool(getattr(core, "dream_enabled", False))
+            self.dream_db_path = Path(getattr(core, "dreams_db_path", self.dream_db_path))
         # ---------------------------------------------
         # ECM (Emotional Context Module) initialization 
         # ---------------------------------------------
@@ -307,6 +320,9 @@ class App(tk.Tk):
         self._refresh_index()
 
     def _setup_dream_processor(self):
+        if self.core is not None:
+            # The core already built, started, and wired the DreamProcessor.
+            return
         if not DreamProcessorClass:
             return
         try:
@@ -386,7 +402,9 @@ class App(tk.Tk):
             messagebox.showerror("Dream", "Dream processor is unavailable.")
             return
         self.dream_enabled = not self.dream_enabled
-        if hasattr(self.dream_processor, "authorize"):
+        if self.core is not None:
+            self.core.set_dream_enabled(self.dream_enabled)
+        elif hasattr(self.dream_processor, "authorize"):
             try:
                 self.dream_processor.authorize(self.dream_enabled)
             except Exception:
@@ -404,7 +422,9 @@ class App(tk.Tk):
             return
         try:
             capsule = None
-            if hasattr(self.dream_processor, "force_dream_pass"):
+            if self.core is not None:
+                capsule = self.core.run_dream_pass()
+            elif hasattr(self.dream_processor, "force_dream_pass"):
                 capsule = self.dream_processor.force_dream_pass()
             elif hasattr(self.dream_processor, "process_tick"):
                 self.dream_processor.process_tick()
@@ -841,7 +861,9 @@ class App(tk.Tk):
             except Exception:
                 pass
             self._transfer_server = None
-        if self.dream_processor and hasattr(self.dream_processor, "stop"):
+        if self.core is not None:
+            self.core.shutdown()
+        elif self.dream_processor and hasattr(self.dream_processor, "stop"):
             try:
                 self.dream_processor.stop()
             except Exception:
@@ -1218,6 +1240,8 @@ class App(tk.Tk):
             return
 
         self.current_doc_id = doc_id
+        if self.core is not None:
+            self.core.set_current_doc_id(doc_id)
         self._render_document(doc)
         self._record_dream_event("document_open", f"Opened document {doc_id}", {"current_doc_id": doc_id})
 

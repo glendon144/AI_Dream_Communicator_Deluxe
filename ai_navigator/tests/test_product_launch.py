@@ -42,9 +42,21 @@ def suite_shell(qtbot, monkeypatch):
     return shell
 
 
+def _standalone_launcher(widget):
+    """Resolve the standalone QProcess launcher from a product widget.
+
+    With Stage 2 embedding, the product widget is an embedded Qt6 pane that
+    wraps the standalone launcher (``standalone_launcher``); in fallback mode
+    the widget itself is the launcher.  The launcher tests below target the
+    standalone launcher in both cases.
+    """
+    launcher = getattr(widget, "standalone_launcher", None)
+    return launcher if launcher is not None else widget
+
+
 @pytest.fixture
 def pikit_pane(suite_shell):
-    return suite_shell.product_stack.widget(1)
+    return _standalone_launcher(suite_shell.product_stack.widget(1))
 
 
 @pytest.fixture
@@ -55,7 +67,7 @@ def pikit_pane_active(pikit_pane, suite_shell, qtbot):
 
 @pytest.fixture
 def funkit_pane(suite_shell):
-    return suite_shell.product_stack.widget(2)
+    return _standalone_launcher(suite_shell.product_stack.widget(2))
 
 
 @pytest.fixture
@@ -108,16 +120,22 @@ def test_ai_navigator_is_main_window(suite_shell):
     )
 
 
-def test_pikit_is_product_launcher_pane(pikit_pane):
+def test_pikit_is_embedded_pane_with_standalone_launcher(suite_shell):
     import ai_navigator
+    import qt_panes
 
-    assert isinstance(pikit_pane, ai_navigator.ProductLauncherPane)
+    widget = suite_shell.product_stack.widget(1)
+    assert isinstance(widget, qt_panes.PiKitPane)
+    assert isinstance(widget.standalone_launcher, ai_navigator.ProductLauncherPane)
 
 
-def test_funkit_is_product_launcher_pane(funkit_pane):
+def test_funkit_is_embedded_pane_with_standalone_launcher(suite_shell):
     import ai_navigator
+    import qt_panes
 
-    assert isinstance(funkit_pane, ai_navigator.ProductLauncherPane)
+    widget = suite_shell.product_stack.widget(2)
+    assert isinstance(widget, qt_panes.FunKitPane)
+    assert isinstance(widget.standalone_launcher, ai_navigator.ProductLauncherPane)
 
 
 def test_pikit_root_path_exists(pikit_pane):
@@ -245,7 +263,7 @@ def test_pikit_dependency_check_openai_is_importable(pikit_pane):
 
 
 def test_vertical_menu_launches_pikit_pane_and_triggers_process(suite_shell, qtbot):
-    pikit_pane = suite_shell.product_stack.widget(1)
+    pikit_pane = _standalone_launcher(suite_shell.product_stack.widget(1))
     pikit_pane._ensure_runtime_dependencies = MagicMock(return_value=True)
     pikit_pane._ensure_launch_environment = MagicMock(return_value=MagicMock())
 
@@ -262,7 +280,7 @@ def test_vertical_menu_launches_pikit_pane_and_triggers_process(suite_shell, qtb
 
 
 def test_vertical_menu_launches_funkit_pane_and_triggers_process(suite_shell, qtbot):
-    funkit_pane = suite_shell.product_stack.widget(2)
+    funkit_pane = _standalone_launcher(suite_shell.product_stack.widget(2))
     funkit_pane._ensure_runtime_dependencies = MagicMock(return_value=True)
     funkit_pane._ensure_launch_environment = MagicMock(return_value=MagicMock())
 

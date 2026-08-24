@@ -2,10 +2,17 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from modules.ai_adapter import AIInterface
-from modules.command_processor import CommandProcessor
-from modules.document_store import DEFAULT_DB_PATH, DocumentStore
-from modules.provider_registry import registry
+# Dual-mode imports (standalone ``modules.*`` vs embedded ``FunKit.modules.*``).
+try:
+    from modules.ai_adapter import AIInterface
+    from modules.command_processor import CommandProcessor
+    from modules.document_store import DEFAULT_DB_PATH, DocumentStore
+    from modules.provider_registry import registry
+except ImportError:
+    from .ai_adapter import AIInterface
+    from .command_processor import CommandProcessor
+    from .document_store import DEFAULT_DB_PATH, DocumentStore
+    from .provider_registry import registry
 
 
 def build_document_store(db_path: str | Path = DEFAULT_DB_PATH) -> DocumentStore:

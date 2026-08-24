@@ -7,7 +7,7 @@ from pathlib import Path
 from unittest.mock import Mock
 
 
-MODULES_DIR = Path("/home/gross/src/050526/funkit/modules")
+MODULES_DIR = Path(__file__).resolve().parent.parent / "modules"
 if str(MODULES_DIR) not in sys.path:
     sys.path.insert(0, str(MODULES_DIR))
 

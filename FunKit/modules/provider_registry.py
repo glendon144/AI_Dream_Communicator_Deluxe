@@ -3,8 +3,13 @@ import json, os, threading
 from dataclasses import dataclass
 from typing import Dict, Optional, Any
 
-PROVIDERS_PATH = os.path.join("storage", "providers.json")
-APP_STATE_PATH = os.path.join("storage", "app_state.json")
+# Storage base defaults to the CWD-relative ``storage`` dir.  The FunKit core
+# sets FUNKIT_STORAGE_DIR to its explicit storage dir BEFORE importing this
+# module (see FunKit/core.py), so embedding never writes provider defaults to
+# the shell's working directory.
+_STORAGE_BASE = os.environ.get("FUNKIT_STORAGE_DIR", "storage")
+PROVIDERS_PATH = os.path.join(_STORAGE_BASE, "providers.json")
+APP_STATE_PATH = os.path.join(_STORAGE_BASE, "app_state.json")
 _lock = threading.Lock()
 
 @dataclass
@@ -122,4 +127,20 @@ class ProviderRegistry:
                 json.dump(state, f, indent=2)
 
 registry = ProviderRegistry()
+
+
+def configure_paths(storage_dir: str) -> None:
+    """Point the provider registry at an explicit storage directory.
+
+    The default paths are relative to the process working directory, which is
+    wrong when FunKit is embedded in the AI Navigator shell (the shell's CWD
+    is not the FunKit checkout).  The FunKit core calls this with its explicit
+    storage dir before building the AI interface; standalone launches are
+    unaffected because the configured dir matches the CWD-relative default.
+    """
+    global PROVIDERS_PATH, APP_STATE_PATH
+    PROVIDERS_PATH = os.path.join(storage_dir, "providers.json")
+    APP_STATE_PATH = os.path.join(storage_dir, "app_state.json")
+    registry._load()
+
 

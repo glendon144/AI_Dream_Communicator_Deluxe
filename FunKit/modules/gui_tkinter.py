@@ -366,11 +366,20 @@ class DemoKitGUI(tk.Tk):
 
     SIDEBAR_WIDTH = 320
 
-    def __init__(self, doc_store, processor):
+    def __init__(self, doc_store=None, processor=None, core=None):
         super().__init__()
-        self.doc_store = doc_store
-        self.processor = processor
-        self.logger: Logger = getattr(processor, "logger", Logger())
+        # When constructed over a FunKitCore, the core owns the business
+        # objects and settings; the GUI only renders them.  The positional
+        # (doc_store, processor) form remains supported for standalone use.
+        self.core = core
+        if core is not None:
+            self.doc_store = core.doc_store
+            self.processor = core.processor
+            self.settings = core.settings
+        else:
+            self.doc_store = doc_store
+            self.processor = processor
+        self.logger: Logger = getattr(self.processor, "logger", Logger())
         self.current_doc_id: int | None = None
         self.history: list[int] = []
 
@@ -440,7 +449,8 @@ class DemoKitGUI(tk.Tk):
         self._image_enlarged: bool = False
 
         # ---- Settings ----
-        self.settings = self._load_settings()
+        if self.core is None:
+            self.settings = self._load_settings()
         self.opml_expand_depth: int = int(self.settings.get("opml_expand_depth", 2))
         self.archive_memory_enabled: bool = bool(self.settings.get("archive_memory_enabled", True))
         self.archive_publish_to_dream: bool = bool(self.settings.get("archive_publish_to_dream", False))
@@ -706,6 +716,8 @@ class DemoKitGUI(tk.Tk):
     # ---------------- Settings ----------------
 
     def _load_settings(self) -> dict:
+        if self.core is not None:
+            return self.core.settings
         try:
             if SETTINGS_FILE.exists():
                 return json.loads(_read_file_text_or_data_uri(SETTINGS_FILE))
@@ -714,12 +726,17 @@ class DemoKitGUI(tk.Tk):
         return {}
 
     def _save_settings(self):
+        if self.core is not None:
+            self.core.save_settings()
+            return
         try:
             SETTINGS_FILE.write_text(json.dumps(self.settings, indent=2), encoding="utf-8")
         except Exception as e:
             print("[WARN] Could not save settings:", e)
 
     def _get_memory_publish_adapter(self):
+        if self.core is not None:
+            return self.core.get_memory_publish_adapter()
         if self._memory_publish_adapter is not None:
             return self._memory_publish_adapter
 
@@ -789,6 +806,24 @@ class DemoKitGUI(tk.Tk):
         return self._memory_publish_adapter
 
     def _archive_memory_after_export(self, *, title: str, body, export_path: str) -> None:
+        if self.core is not None:
+            # The core owns the publish flow; binary rendering stays here
+            # (view concern), matching the standalone path exactly.
+            if isinstance(body, (bytes, bytearray)):
+                content = render_binary_as_text(body, title or "Document")
+            else:
+                content = body or ""
+            self.core.archive_after_export(
+                title=title,
+                content=content,
+                doc_id=self.current_doc_id,
+                export_path=export_path,
+                publish_to_dream=self.archive_publish_to_dream,
+                publish_to_openbrain=self.archive_publish_to_openbrain,
+                ttl_seconds=self.archive_memory_ttl_seconds,
+            )
+            return
+
         adapter = self._get_memory_publish_adapter()
         if adapter is None:
             return

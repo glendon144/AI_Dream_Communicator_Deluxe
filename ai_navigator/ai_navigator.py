@@ -145,6 +145,13 @@ WEBMCP_FLASK_BASE_URL = os.getenv("WEBMCP_FLASK_BASE_URL", "http://127.0.0.1:505
 APP_DIR = Path(__file__).resolve().parent
 SUITE_DIR = APP_DIR.parent
 
+# The embedded product panes import the products as unambiguous packages
+# (``PiKit.core`` / ``FunKit.core`` / ``PiKit.modules.*``); make the suite
+# root importable.  Appending (not prepending) keeps existing script-dir
+# resolution untouched and shadows nothing.
+if str(SUITE_DIR) not in sys.path:
+    sys.path.append(str(SUITE_DIR))
+
 
 def _resolve_pikit_root() -> Path:
     env_path = os.getenv("PIKIT_ROOT")
@@ -3976,7 +3983,9 @@ class ProductLauncherPane(QWidget):
 
         self.output_view.clear()
         self.process = QProcess(self)
-        self.process.setWorkingDirectory(str(Path.home()))
+        # Launch from the product root (not $HOME) so relative storage/database
+        # paths resolve identically to the Dream Capture handoff launch path.
+        self.process.setWorkingDirectory(str(self.root_path))
         self.process.setProcessEnvironment(launch_env)
         self.process.setProgram(str(python_exe))
         self.process.setArguments([] if packaged else [str(entrypoint)])
@@ -4078,6 +4087,44 @@ class ProductLauncherPane(QWidget):
 
 
 # ---------------------------------------------------------------------------
+# Product widget construction (progressive enhancement)
+# ---------------------------------------------------------------------------
+
+_PRODUCT_DESCRIPTIONS = {
+    "PiKit": "OPML / knowledge organization mode.",
+    "FunKit": "AI query / LLM interaction mode.",
+}
+
+
+def _build_product_widget(title: str, root_path: Path, venv_name: str, parent=None):
+    """Embedded Qt6 pane with progressive-enhancement fallback.
+
+    The embedded pane (a thin view over ``PiKit.core`` / ``FunKit.core``) is
+    preferred.  If the pane cannot be imported or initialized, the existing
+    standalone ``ProductLauncherPane`` (QProcess launch) is returned instead,
+    so one broken embedded product never prevents AI Navigator or the other
+    product from starting.
+    """
+    launcher = ProductLauncherPane(
+        title, _PRODUCT_DESCRIPTIONS.get(title, ""), root_path, venv_name
+    )
+    try:
+        from qt_panes import FunKitPane, PiKitPane
+
+        pane_cls = PiKitPane if title == "PiKit" else FunKitPane
+        pane = pane_cls(root_path, standalone_launcher=launcher, parent=parent)
+        print(f"[suite] {title} embedded pane active.", flush=True)
+        return pane
+    except Exception as exc:
+        print(
+            f"[suite] {title} embedded pane unavailable; "
+            f"falling back to standalone launcher: {exc}",
+            flush=True,
+        )
+        return launcher
+
+
+# ---------------------------------------------------------------------------
 # Suite Shell
 # ---------------------------------------------------------------------------
 
@@ -4130,22 +4177,12 @@ class SuiteShell(QWidget):
         self._add_product_button("AI Navigator", self.ai_navigator, sidebar_layout)
         self._add_product_button(
             "PiKit",
-            ProductLauncherPane(
-                "PiKit",
-                "OPML / knowledge organization mode.",
-                PIKIT_ROOT,
-                "pikit",
-            ),
+            _build_product_widget("PiKit", PIKIT_ROOT, "pikit", parent=self),
             sidebar_layout,
         )
         self._add_product_button(
             "FunKit",
-            ProductLauncherPane(
-                "FunKit",
-                "AI query / LLM interaction mode.",
-                FUNKIT_ROOT,
-                "funkit",
-            ),
+            _build_product_widget("FunKit", FUNKIT_ROOT, "funkit", parent=self),
             sidebar_layout,
         )
 
@@ -4215,6 +4252,13 @@ class SuiteShell(QWidget):
                 pane.status_label.setText(
                     f"Dream Capture copied. Launch {destination}, then paste it to continue."
                 )
+            return
+        # Embedded pane: same external packet contract, delivered in-process
+        # through the product's core (PiKit: shared file inbox; FunKit: direct
+        # packet import).  The clipboard copy still happened above.
+        accept = getattr(pane, "accept_handoff", None)
+        if callable(accept):
+            accept(packet=packet, title=title, source_capture_id=source_capture_id)
 
     def _apply_shell_styles(self) -> None:
         self.setStyleSheet(APP_CHROME_STYLESHEET)

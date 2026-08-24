@@ -6,10 +6,20 @@ from typing import Any, Callable
 try:
     from dream import DreamProcessor
 except ImportError:
+    # Works in both modes when the repo root (hosting the PiKit package) is on
+    # sys.path; standalone FunKit without the repo root on path reports the
+    # adapter as unavailable (pre-existing behavior, preserved).
     from PiKit.modules.dream import DreamProcessor
 
-from dream_client import DreamClient
-from openbrain_client import OpenBrainClient
+try:
+    from dream_client import DreamClient
+except ImportError:  # embedded as FunKit.modules.memory_publish_adapter
+    from .dream_client import DreamClient
+
+try:
+    from openbrain_client import OpenBrainClient
+except ImportError:  # embedded as FunKit.modules.memory_publish_adapter
+    from .openbrain_client import OpenBrainClient
 
 
 @dataclass
