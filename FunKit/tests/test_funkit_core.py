@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -505,3 +506,54 @@ def test_core_ask_question_async_returns_reply(tmp_path):
     core.ai.query.assert_called()
     core.doc_store.add_document("After", "still works")
     assert len(core.doc_store.get_document_index()) == 1
+
+
+# ---------------------------------------------------------------------------
+# Launch/import regression: `python main.py` loads core as a top-level
+# module, so the old `from .modules...` fallback raised "attempted relative
+# import with no known parent package" whenever the first import failed.
+# ---------------------------------------------------------------------------
+
+
+def _run_python_script(script: str) -> subprocess.CompletedProcess:
+    return subprocess.run(
+        [sys.executable, "-c", script],
+        capture_output=True,
+        text=True,
+        timeout=60,
+        cwd=str(FUNKIT_DIR),
+    )
+
+
+def test_core_imports_in_script_mode():
+    """`python FunKit/main.py` loads core as a top-level module; the
+    product root must be importable so the modules.* imports resolve."""
+    result = _run_python_script(
+        "import core\n"
+        "assert core.FunKitCore is not None\n"
+        "print('CORE_OK')\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CORE_OK" in result.stdout
+
+
+def test_core_import_failure_never_uses_relative_fallback():
+    """Shadowing the top-level `modules` package forces the import to fail
+    while core is still a top-level module; the failure must surface as the
+    real error, not 'attempted relative import with no known parent
+    package'."""
+    result = _run_python_script(
+        "import sys, types\n"
+        "sys.modules['modules'] = types.ModuleType('modules')\n"
+        "try:\n"
+        "    import core\n"
+        "except ImportError as exc:\n"
+        "    message = str(exc)\n"
+        "    assert 'no known parent package' not in message, message\n"
+        "    print('CLEAR_IMPORT_ERROR')\n"
+        "else:\n"
+        "    print('CORE_IMPORTED')\n"
+    )
+    assert result.returncode == 0, result.stderr
+    assert "CLEAR_IMPORT_ERROR" in result.stdout
+    assert "no known parent package" not in result.stdout

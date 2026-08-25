@@ -110,3 +110,31 @@ def test_narrow_webmcp_adds_synced_browser_mirror_and_restore_removes_it(qtbot, 
     assert window.browser_mirror_pane is None
     assert mirror is not window.browser_pane
     assert window.outer_splitter.count() == 2
+
+
+def test_webmcp_actions_pane_keeps_all_action_buttons_visible(qtbot, monkeypatch):
+    import ai_navigator
+
+    monkeypatch.setattr(ai_navigator, "WEBMCP_RELAY_SERVER", "/path/that/does/not/exist")
+    browser = QWidget()
+    pane = ai_navigator.WebMCPActionsPane(browser)
+    qtbot.addWidget(browser)
+    qtbot.addWidget(pane)
+
+    pane.resize(480, 500)
+    pane.show()
+    qtbot.wait(10)
+
+    buttons = (pane.refresh_button, pane.inspect_button, pane.execute_button)
+    assert [button.text() for button in buttons] == [
+        "Refresh Actions",
+        "Preview Payload",
+        "Execute in Browser",
+    ]
+    assert [button.objectName() for button in buttons] == [
+        "webmcpRefreshButton",
+        "webmcpPreviewButton",
+        "webmcpExecuteButton",
+    ]
+    assert all(button.isVisible() and button.width() > 0 for button in buttons)
+    assert pane._call_row.direction() == ai_navigator.QBoxLayout.TopToBottom

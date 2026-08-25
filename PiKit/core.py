@@ -18,34 +18,71 @@ correctness does not depend on the process working directory.
 
 from __future__ import annotations
 
+import importlib
 import queue
 import socket
+import sys
 import threading
 from pathlib import Path
 from typing import Any, Callable
 
-# Dual-mode imports: standalone ``python main.py`` resolves the top-level
-# ``modules`` package (PiKit dir on sys.path); in-process embedding imports
-# this module as ``PiKit.core``, where the package-relative forms are used.
-try:
-    from modules.command_processor import CommandProcessor
-    from modules.document_store import DocumentStore
-    from modules.dream import DreamProcessor
-except ImportError:
-    from .modules.command_processor import CommandProcessor
-    from .modules.document_store import DocumentStore
-    from .modules.dream import DreamProcessor
+# The product root holds the ``modules`` package.  Guarantee it is importable
+# whether this module runs as a plain script (``python main.py``, root already
+# on sys.path) or is imported as part of the ``PiKit`` package (``python -m
+# PiKit.main`` or in-process embedding), where the root may not be on
+# sys.path.
+_PRODUCT_ROOT = str(Path(__file__).resolve().parent)
+if _PRODUCT_ROOT not in sys.path:
+    sys.path.insert(0, _PRODUCT_ROOT)
 
-try:
-    from dream_capture_inbox import (
-        import_handoff_payload as _import_packet,
-        process_inbox_once as _process_inbox_once,
-    )
-except ImportError:
-    from .dream_capture_inbox import (
-        import_handoff_payload as _import_packet,
-        process_inbox_once as _process_inbox_once,
-    )
+
+def _import_product_module(rel_module: str):
+    """Import ``rel_module`` (dotted, relative to the product root) from THIS
+    product.
+
+    Resolves the right package in every launch mode:
+    * ``python main.py`` — the product root is on sys.path, so the top-level
+      import works (any genuine dependency error surfaces with its real
+      message).
+    * ``python -m PiKit.main`` / in-process embedding — the package-relative
+      import is used.
+    * several sibling products in one interpreter — the top-level ``modules``
+      name may belong to another product, so the file location is verified and
+      the package-relative import is used instead.  A naive relative fallback
+      would raise "attempted relative import with no known parent package"
+      when this module is executed as a plain script.
+    """
+    root = Path(__file__).resolve().parent
+    module = None
+    try:
+        module = importlib.import_module(rel_module)
+    except ImportError:
+        module = None
+    if module is not None:
+        module_file = Path(getattr(module, "__file__", "") or "").resolve()
+        if root in module_file.parents:
+            return module
+        # The top-level name belongs to a sibling product, not ours.
+    if __package__:
+        return importlib.import_module(f".{rel_module}", __package__)
+    # Plain script: the product root is on sys.path (guaranteed above), so
+    # re-importing surfaces any genuine dependency error with its real
+    # message instead of a misleading relative-import error.
+    return importlib.import_module(rel_module)
+
+
+_command_processor = _import_product_module("modules.command_processor")
+CommandProcessor = _command_processor.CommandProcessor
+_document_store = _import_product_module("modules.document_store")
+DocumentStore = _document_store.DocumentStore
+_dream = _import_product_module("modules.dream")
+DreamProcessor = _dream.DreamProcessor
+
+_dream_inbox = _import_product_module("dream_capture_inbox")
+import_handoff_payload = _dream_inbox.import_handoff_payload
+process_inbox_once = _dream_inbox.process_inbox_once
+_import_packet = import_handoff_payload
+_process_inbox_once = process_inbox_once
 
 
 def _null_status(message: str) -> None:
@@ -147,12 +184,7 @@ class PiKitCore:
         # Lazily imported so this module stays importable without the
         # optional `openai` package (modules.ai_interface imports it at the
         # module level).
-        try:
-            from modules.ai_interface import AIInterface
-        except ImportError:
-            from .modules.ai_interface import AIInterface
-
-        return AIInterface()
+        return _import_product_module("modules.ai_interface").AIInterface()
 
     def _build_dream_processor(self) -> DreamProcessor:
         self.dreams_db_path.parent.mkdir(parents=True, exist_ok=True)
@@ -248,11 +280,7 @@ class PiKitCore:
         self, path: Path, on_imported: Callable[[int], None] | None = None
     ) -> int:
         """Import one inbox file; ``on_imported`` is the view's reveal hook."""
-        try:
-            from dream_capture_inbox import process_handoff_file as _process_file
-        except ImportError:
-            from .dream_capture_inbox import process_handoff_file as _process_file
-
+        _process_file = _import_product_module("dream_capture_inbox").process_handoff_file
         return _process_file(path, self.processor, _CoreInboxView(self, on_imported))
 
     def consume_inbox_once(
@@ -282,18 +310,10 @@ class PiKitCore:
         doc = self.doc_store.get_document(doc_id)
         if not doc:
             raise ValueError(f"Document {doc_id} not found")
-        try:
-            from modules.save_as_text_plugin_v3 import (
-                _doc_tuple,
-                _flatten_opml_to_text,
-                _is_opml_text,
-            )
-        except ImportError:
-            from .modules.save_as_text_plugin_v3 import (
-                _doc_tuple,
-                _flatten_opml_to_text,
-                _is_opml_text,
-            )
+        _plugin = _import_product_module("modules.save_as_text_plugin_v3")
+        _doc_tuple = _plugin._doc_tuple
+        _flatten_opml_to_text = _plugin._flatten_opml_to_text
+        _is_opml_text = _plugin._is_opml_text
         _doc_id, title, body = _doc_tuple(doc)
         if isinstance(body, (bytes, bytearray)):
             body = bytes(body).decode("utf-8", errors="replace")
@@ -312,11 +332,7 @@ class PiKitCore:
 
     @staticmethod
     def _aopmlengine():
-        try:
-            from modules import aopmlengine
-        except ImportError:
-            from .modules import aopmlengine
-        return aopmlengine
+        return _import_product_module("modules.aopmlengine")
 
     def convert_document_to_opml(self, doc_id: int) -> int:
         """Convert a document body to OPML and store it as a new document."""
@@ -358,11 +374,7 @@ class PiKitCore:
     # ------------------------------------------------------------------
 
     def _document_transfer(self):
-        try:
-            from modules import document_transfer
-        except ImportError:
-            from .modules import document_transfer
-        return document_transfer
+        return _import_product_module("modules.document_transfer")
 
     def start_transfer_listener(
         self,

@@ -23,22 +23,65 @@ future embedded consumer.
 
 from __future__ import annotations
 
+import importlib
 import json
 import os
+import sys
 import threading
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable
 
-# Dual-mode imports: standalone ``python main.py`` resolves the top-level
-# ``modules`` package (FunKit dir on sys.path); in-process embedding imports
-# this module as ``FunKit.core``, where the package-relative forms are used.
-try:
-    from modules.command_processor import CommandProcessor
-    from modules.document_store import DEFAULT_DB_PATH, DocumentStore
-except ImportError:
-    from .modules.command_processor import CommandProcessor
-    from .modules.document_store import DEFAULT_DB_PATH, DocumentStore
+# The product root holds the ``modules`` package.  Guarantee it is importable
+# whether this module runs as a plain script (``python main.py``, root already
+# on sys.path) or is imported as part of the ``FunKit`` package (``python -m
+# FunKit.main`` or in-process embedding), where the root may not be on
+# sys.path.
+_PRODUCT_ROOT = str(Path(__file__).resolve().parent)
+if _PRODUCT_ROOT not in sys.path:
+    sys.path.insert(0, _PRODUCT_ROOT)
+
+
+def _import_product_module(rel_module: str):
+    """Import ``rel_module`` (dotted, relative to the product root) from THIS
+    product.
+
+    Resolves the right package in every launch mode:
+    * ``python main.py`` — the product root is on sys.path, so the top-level
+      import works (any genuine dependency error surfaces with its real
+      message).
+    * ``python -m FunKit.main`` / in-process embedding — the package-relative
+      import is used.
+    * several sibling products in one interpreter — the top-level ``modules``
+      name may belong to another product, so the file location is verified and
+      the package-relative import is used instead.  A naive relative fallback
+      would raise "attempted relative import with no known parent package"
+      when this module is executed as a plain script.
+    """
+    root = Path(__file__).resolve().parent
+    module = None
+    try:
+        module = importlib.import_module(rel_module)
+    except ImportError:
+        module = None
+    if module is not None:
+        module_file = Path(getattr(module, "__file__", "") or "").resolve()
+        if root in module_file.parents:
+            return module
+        # The top-level name belongs to a sibling product, not ours.
+    if __package__:
+        return importlib.import_module(f".{rel_module}", __package__)
+    # Plain script: the product root is on sys.path (guaranteed above), so
+    # re-importing surfaces any genuine dependency error with its real
+    # message instead of a misleading relative-import error.
+    return importlib.import_module(rel_module)
+
+
+_command_processor = _import_product_module("modules.command_processor")
+CommandProcessor = _command_processor.CommandProcessor
+_document_store = _import_product_module("modules.document_store")
+DocumentStore = _document_store.DocumentStore
+DEFAULT_DB_PATH = _document_store.DEFAULT_DB_PATH
 
 DEFAULT_SETTINGS_FILE = "funkit_settings.json"
 DEFAULT_DREAMS_DB_PATH = Path("storage") / "funkit_dreams.sqlite3"
@@ -131,10 +174,9 @@ class FunKitCore:
         # root) reads/writes FunKit/storage/providers.json.  Standalone
         # launches are unaffected (configured dir == CWD default).
         os.environ.setdefault("FUNKIT_STORAGE_DIR", str(self.storage_dir))
-        try:
-            from modules.provider_registry import configure_paths
-        except ImportError:
-            from .modules.provider_registry import configure_paths
+        configure_paths = _import_product_module(
+            "modules.provider_registry"
+        ).configure_paths
         configure_paths(str(self.storage_dir))
 
         # Business objects (mirrors what main.py previously assembled via
@@ -144,10 +186,7 @@ class FunKitCore:
             self.processor = processor
             self.ai = ai
         else:
-            try:
-                from modules.app_runtime import build_processor
-            except ImportError:
-                from .modules.app_runtime import build_processor
+            build_processor = _import_product_module("modules.app_runtime").build_processor
 
             if store is None:
                 store = DocumentStore(str(self.db_path))
@@ -197,21 +236,10 @@ class FunKitCore:
             return None
 
         try:
-            from memory_publish_adapter import (
-                DreamServerPublisher,
-                FunKitDreamAdapter,
-                OpenBrainPublisher,
-            )
-        except ImportError:
-            try:
-                from .modules.memory_publish_adapter import (
-                    DreamServerPublisher,
-                    FunKitDreamAdapter,
-                    OpenBrainPublisher,
-                )
-            except Exception as exc:
-                self.report_status(f"Archive memory adapter unavailable: {exc}")
-                return None
+            _publish_adapter = _import_product_module("modules.memory_publish_adapter")
+            DreamServerPublisher = _publish_adapter.DreamServerPublisher
+            FunKitDreamAdapter = _publish_adapter.FunKitDreamAdapter
+            OpenBrainPublisher = _publish_adapter.OpenBrainPublisher
         except Exception as exc:
             self.report_status(f"Archive memory adapter unavailable: {exc}")
             return None
@@ -407,10 +435,7 @@ class FunKitCore:
 
     def get_memory(self, key: str = "global") -> dict[str, Any]:
         """Read the ai_memory record for a key (viewed/edited by the UI)."""
-        try:
-            from modules.ai_memory import get_memory as _get_memory
-        except ImportError:
-            from .modules.ai_memory import get_memory as _get_memory
+        _get_memory = _import_product_module("modules.ai_memory").get_memory
         conn = getattr(self.doc_store, "conn", None)
         if conn is None:
             return {}
@@ -422,10 +447,7 @@ class FunKitCore:
 
     def set_memory(self, data: dict[str, Any], key: str = "global") -> None:
         """Persist the ai_memory record for a key."""
-        try:
-            from modules.ai_memory import set_memory as _set_memory
-        except ImportError:
-            from .modules.ai_memory import set_memory as _set_memory
+        _set_memory = _import_product_module("modules.ai_memory").set_memory
         conn = getattr(self.doc_store, "conn", None)
         if conn is None:
             return
@@ -439,11 +461,7 @@ class FunKitCore:
     # ------------------------------------------------------------------
 
     def _provider_registry(self):
-        try:
-            from modules.provider_registry import registry
-        except ImportError:
-            from .modules.provider_registry import registry
-        return registry
+        return _import_product_module("modules.provider_registry").registry
 
     def list_providers(self) -> list[tuple[str, str]]:
         """Return [(key, label), ...] in providers.json order."""
@@ -690,18 +708,10 @@ class FunKitCore:
         doc = self.doc_store.get_document(doc_id)
         if not doc:
             raise ValueError(f"Document {doc_id} not found")
-        try:
-            from modules.save_as_text_plugin_v3 import (
-                _doc_tuple,
-                _flatten_opml_to_text,
-                _is_opml_text,
-            )
-        except ImportError:
-            from .modules.save_as_text_plugin_v3 import (
-                _doc_tuple,
-                _flatten_opml_to_text,
-                _is_opml_text,
-            )
+        _plugin = _import_product_module("modules.save_as_text_plugin_v3")
+        _doc_tuple = _plugin._doc_tuple
+        _flatten_opml_to_text = _plugin._flatten_opml_to_text
+        _is_opml_text = _plugin._is_opml_text
         _doc_id, title, body = _doc_tuple(doc)
         if isinstance(body, (bytes, bytearray)):
             body = bytes(body).decode("utf-8", errors="replace")
