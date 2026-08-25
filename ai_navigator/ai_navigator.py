@@ -4304,11 +4304,18 @@ class ProductLauncherPane(QWidget):
 
     def _handle_finished(self, exit_code: int, exit_status):
         self.status_label.setText(f"{self.title} exited with code {exit_code}.")
+        if exit_code != 0:
+            detail = self.output_view.toPlainText().strip() or "no output captured"
+            QMessageBox.warning(
+                self,
+                f"{self.title} exited with an error",
+                f"{self.title} exited with code {exit_code}.\n\n{detail[-2000:]}",
+            )
 
     def _handle_error(self, error):
-        self.status_label.setText(
-            f"Could not launch {self.title}: {self.process.errorString()}"
-        )
+        message = f"Could not launch {self.title}: {self.process.errorString()}"
+        self.status_label.setText(message)
+        QMessageBox.critical(self, f"Could not launch {self.title}", message)
 
 
 # ---------------------------------------------------------------------------
