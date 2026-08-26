@@ -1338,7 +1338,14 @@ class ThrobberWidget(QWidget):
 
 
 class DiagnosticWebEnginePage(QWebEnginePage):
-    """Mirror Chromium JavaScript console messages to the launching Terminal."""
+    """Mirror console messages and host browser-requested popup windows."""
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Keep non-modal popup dialogs alive until Chromium or the user closes
+        # them. OAuth providers commonly use window.open(), and discarding the
+        # page returned by createWindow() makes their login buttons appear inert.
+        self._popup_dialogs = set()
 
     def javaScriptConsoleMessage(self, level, message, line_number, source_id):
         print(
@@ -1347,6 +1354,43 @@ class DiagnosticWebEnginePage(QWebEnginePage):
             flush=True,
         )
         super().javaScriptConsoleMessage(level, message, line_number, source_id)
+
+    def createWindow(self, window_type):
+        """Open JavaScript/OAuth popups with this page's browser profile."""
+        owner_view = self.view()
+        owner_window = owner_view.window() if owner_view is not None else None
+
+        dialog = QDialog(owner_window)
+        dialog.setAttribute(Qt.WidgetAttribute.WA_DeleteOnClose, True)
+        dialog.setModal(False)
+        dialog.setWindowTitle("Browser sign-in")
+        dialog.resize(900, 700)
+
+        layout = QVBoxLayout(dialog)
+        layout.setContentsMargins(0, 0, 0, 0)
+
+        popup_view = QWebEngineView(dialog)
+        # Supplying the originating profile is essential: Google account state
+        # and the relying site's resulting session cookies stay in one jar.
+        popup_page = DiagnosticWebEnginePage(self.profile(), popup_view)
+        popup_view.setPage(popup_page)
+        layout.addWidget(popup_view)
+
+        self._popup_dialogs.add(dialog)
+        dialog.destroyed.connect(
+            lambda *_args, popup=dialog: self._popup_dialogs.discard(popup)
+        )
+        popup_page.windowCloseRequested.connect(dialog.close)
+        popup_view.titleChanged.connect(
+            lambda title, popup=dialog: popup.setWindowTitle(
+                title or "Browser sign-in"
+            )
+        )
+
+        dialog.show()
+        dialog.raise_()
+        dialog.activateWindow()
+        return popup_page
 
 
 class BrowserPane(QWidget):

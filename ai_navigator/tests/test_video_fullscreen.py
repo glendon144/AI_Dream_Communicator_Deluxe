@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 
 import pytest
 from PySide6.QtCore import Qt
-from PySide6.QtWebEngineCore import QWebEngineSettings
+from PySide6.QtWebEngineCore import QWebEnginePage, QWebEngineSettings
 from PySide6.QtWidgets import QApplication
 
 MODULE_DIR = Path(__file__).resolve().parent.parent
@@ -100,3 +100,19 @@ def test_video_control_visibility_state(browser_pane):
 
     browser_pane._set_video_control_visible(False)
     assert browser_pane.video_fullscreen_button.isVisible() is False
+
+def test_oauth_popup_uses_originating_browser_profile(browser_pane, qtbot):
+    parent_page = browser_pane.view.page()
+
+    popup_page = parent_page.createWindow(QWebEnginePage.WebBrowserWindow)
+    assert popup_page is not None
+    assert popup_page.profile() == parent_page.profile()
+    assert len(parent_page._popup_dialogs) == 1
+
+    popup_dialog = next(iter(parent_page._popup_dialogs))
+    assert popup_dialog.isVisible() is True
+    assert popup_page.view().parentWidget() is popup_dialog
+
+    popup_page.windowCloseRequested.emit()
+    qtbot.waitUntil(lambda: not parent_page._popup_dialogs, timeout=1000)
+
