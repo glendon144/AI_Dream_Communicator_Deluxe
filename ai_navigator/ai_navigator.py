@@ -106,6 +106,12 @@ from capture_store import (
     queue_pikit_handoff,
     save_capture,
 )
+from grab_screenshut import (
+    ScreenshotArtifact,
+    append_screenshot_note,
+    copy_image_to_clipboard,
+    grab_screenshot,
+)
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -139,6 +145,7 @@ DEFAULT_OPML_PATH = str(USER_DATA_DIR / "archive_export.opml")
 
 # Separate memory DB (M1)
 MEMORY_DB_PATH = USER_DATA_DIR / "memory.db"
+CAPSULE_SCREENSHOT_DIR = USER_DATA_DIR / "storage" / "context_capsule_images"
 
 init_db_if_needed(DB_PATH)
 
@@ -2206,6 +2213,7 @@ class ResultsPane(QWidget):
 
         self.db_path = db_path
         self.conn = None
+        self.browser_view = None
 
         self.archive_list = QListWidget()
         self.archive_list.setAlternatingRowColors(True)
@@ -2215,6 +2223,8 @@ class ResultsPane(QWidget):
         self.recover_button = QPushButton("Recover")
         self.recover_chat_button = QPushButton("Recover to ChatGPT")
         self.recover_weave_button = QPushButton("Recover Memory Weave")
+        self.copy_screenshot_button = QPushButton("Copy Screenshot")
+        self.copy_screenshot_button.setEnabled(False)
         self.pikit_button = QPushButton("Organize in PiKit")
         self.funkit_button = QPushButton("Ask FunKit")
 
@@ -2229,6 +2239,7 @@ class ResultsPane(QWidget):
             self.recover_button,
             self.recover_chat_button,
             self.recover_weave_button,
+            self.copy_screenshot_button,
             self.pikit_button,
             self.funkit_button,
         ):
@@ -2251,6 +2262,7 @@ class ResultsPane(QWidget):
         details_header_row.addWidget(self.pikit_button)
         details_header_row.addWidget(self.funkit_button)
         details_header_row.addWidget(self.recover_weave_button)
+        details_header_row.addWidget(self.copy_screenshot_button)
         details_header_row.addWidget(self.recover_chat_button)
         details_header_row.addWidget(self.recover_button)
 
@@ -2263,11 +2275,46 @@ class ResultsPane(QWidget):
         self.recover_button.clicked.connect(self._recover_selected)
         self.recover_chat_button.clicked.connect(self._recover_to_chatgpt_selected)
         self.recover_weave_button.clicked.connect(self._recover_memory_weave_selected)
+        self.copy_screenshot_button.clicked.connect(self._copy_pending_screenshot)
         self.pikit_button.clicked.connect(lambda: self._handoff_selected("PiKit"))
         self.funkit_button.clicked.connect(lambda: self._handoff_selected("FunKit"))
 
+        self.pending_screenshot: ScreenshotArtifact | None = None
         self._ensure_connection()
         self._populate_archive_list()
+
+    def set_browser_view(self, browser_view: QWebEngineView) -> None:
+        """Use the live rendered browser viewport for recovery screenshots."""
+
+        self.browser_view = browser_view
+
+    def _capsule_with_browser_screenshot(
+        self, capsule: str
+    ) -> tuple[str, ScreenshotArtifact]:
+        """Capture the current viewport and append its local provenance."""
+
+        if self.browser_view is None:
+            raise RuntimeError("The browser viewport is not available for capture.")
+        artifact = grab_screenshot(self.browser_view, CAPSULE_SCREENSHOT_DIR)
+        return append_screenshot_note(capsule, artifact), artifact
+
+    def _copy_pending_screenshot(self) -> None:
+        if self.pending_screenshot is None:
+            QMessageBox.information(
+                self, "No screenshot", "Create a ChatGPT recovery capsule first."
+            )
+            return
+        try:
+            if not copy_image_to_clipboard(self.pending_screenshot):
+                raise RuntimeError("The screenshot did not reach the clipboard.")
+            QMessageBox.information(
+                self,
+                "Screenshot ready",
+                "Screenshot copied as image-only data.\n"
+                "Return to ChatGPT and paste once more to attach it.",
+            )
+        except Exception as exc:
+            QMessageBox.critical(self, "Copy Screenshot failed", str(exc))
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
@@ -2282,6 +2329,7 @@ class ResultsPane(QWidget):
             self.pikit_button,
             self.funkit_button,
             self.recover_weave_button,
+            self.copy_screenshot_button,
             self.recover_chat_button,
             self.recover_button,
         ):
@@ -2437,7 +2485,9 @@ class ResultsPane(QWidget):
                 body=body or "",
                 hard_cap_chars=6500,
             )
-
+            capsule, screenshot = self._capsule_with_browser_screenshot(capsule)
+            self.pending_screenshot = screenshot
+            self.copy_screenshot_button.setEnabled(True)
             copied = copy_to_clipboard(capsule)
 
             target = "https://chatgpt.com/"
@@ -2458,7 +2508,10 @@ class ResultsPane(QWidget):
                     self,
                     "Capsule ready",
                     "Context Capsule copied to clipboard.\n"
-                    "Switch to the ChatGPT tab and paste to resume.",
+                    f"Image saved at:\n{screenshot.path}\n\n"
+                    "1. Switch to ChatGPT and paste the capsule.\n"
+                    "2. Return here and click Copy Screenshot.\n"
+                    "3. Return to ChatGPT and paste again.",
                 )
             else:
                 QMessageBox.warning(
@@ -2488,7 +2541,9 @@ class ResultsPane(QWidget):
             capsule = build_memory_weave_packet(
                 self.conn, page_id, k=K_WEAVE, hard_cap_chars=7000
             )
-
+            capsule, screenshot = self._capsule_with_browser_screenshot(capsule)
+            self.pending_screenshot = screenshot
+            self.copy_screenshot_button.setEnabled(True)
             copied = copy_to_clipboard(capsule)
 
             target = "https://chatgpt.com/"
@@ -2509,7 +2564,10 @@ class ResultsPane(QWidget):
                     self,
                     "Weave ready",
                     "Memory Weave copied to clipboard (k=3).\n"
-                    "Switch to the ChatGPT tab and paste to resume.",
+                    f"Image saved at:\n{screenshot.path}\n\n"
+                    "1. Switch to ChatGPT and paste the weave.\n"
+                    "2. Return here and click Copy Screenshot.\n"
+                    "3. Return to ChatGPT and paste again.",
                 )
             else:
                 QMessageBox.warning(
@@ -2556,7 +2614,7 @@ def build_context_capsule_for_snapshot(
     body_slice = body[:max_body]
 
     header = (
-        f"### Context Capsule — ai_navigator\n"
+        f"### Context Capsule - ai_navigator\n"
         f"Title: {title}\n"
         f"URL: {url}\n"
         f"Captured: {captured_at}\n"
@@ -2571,7 +2629,7 @@ def build_context_capsule_for_snapshot(
 
     footer = (
         "\nContinue from this capsule. Summarize key points from the page, "
-        "then propose the next 1–2 actions or questions. If anything is unclear, "
+        "then propose the next 1-2 actions or questions. If anything is unclear, "
         "ask for the single most relevant detail rather than restarting."
     )
 
@@ -2633,7 +2691,7 @@ def build_memory_weave_packet(
                 if len(items) >= k:
                     break
 
-    header = "### Context Capsule — ai_navigator\n"
+    header = "### Context Capsule - ai_navigator\n"
     if domain:
         header += f"Thread scope: {domain}\n"
     header += f"Captured: {datetime.utcnow().isoformat(timespec='seconds')}Z\n---\n"
@@ -2644,7 +2702,7 @@ def build_memory_weave_packet(
         url = _clean_for_capsule(url or "")
         ts = _clean_for_capsule(ts or "")
         snip = _clean_for_capsule((snip or "")[:240])
-        lines.append(f"— {ts} · {title} · {url}")
+        lines.append(f"- {ts} - {title} - {url}")
         if snip:
             lines.append(f"   {snip}")
 
@@ -2675,7 +2733,7 @@ def build_global_weave_packet(
     )
     rows = cur.fetchall()
 
-    header = "### Context Capsule — ai_navigator\nThread scope: global\n"
+    header = "### Context Capsule - ai_navigator\nThread scope: global\n"
     header += f"Captured: {datetime.utcnow().isoformat(timespec='seconds')}Z\n---\n"
 
     lines = []
@@ -2684,7 +2742,7 @@ def build_global_weave_packet(
         url = _clean_for_capsule(url or "")
         ts = _clean_for_capsule(ts or "")
         snip = _clean_for_capsule((snip or "")[:240])
-        lines.append(f"— {ts} · {title} · {url}")
+        lines.append(f"- {ts} - {title} - {url}")
         if snip:
             lines.append(f"   {snip}")
 
@@ -3748,6 +3806,7 @@ class MainWindow(QWidget):
             on_memory_log=self._handle_memory_log,
             on_capture_request=self._handle_capture_request,
         )
+        self.results_pane.set_browser_view(self.browser_pane.view)
         self.gmail_pane = GmailPane(browser_pane=self.browser_pane)
         self.webmcp_pane = WebMCPActionsPane(self.browser_pane)
         self._browser_focus_active = False
