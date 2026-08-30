@@ -106,7 +106,7 @@ from capture_store import (
     queue_pikit_handoff,
     save_capture,
 )
-from grab_screenshut import (
+from grab_screenshot import (
     ScreenshotArtifact,
     append_screenshot_note,
     copy_image_to_clipboard,

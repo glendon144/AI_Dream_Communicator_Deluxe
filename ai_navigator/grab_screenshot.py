@@ -104,3 +104,16 @@ def copy_capsule_with_image(capsule: str, artifact: ScreenshotArtifact) -> bool:
         and clipboard_mime.hasImage()
         and clipboard_mime.hasFormat("image/png")
     )
+def copy_image_to_clipboard(artifact: ScreenshotArtifact) -> bool:
+    """Copy a captured screenshot to the Qt clipboard as image-only data."""
+    clipboard = QGuiApplication.clipboard()
+    if clipboard is None:
+        return False
+
+    image = QImage(str(artifact.path))
+    if image.isNull():
+        raise RuntimeError(f"Could not load saved screenshot {artifact.path}")
+
+    clipboard.setImage(image)
+    clipboard_mime = clipboard.mimeData()
+    return bool(clipboard_mime and clipboard_mime.hasImage())
