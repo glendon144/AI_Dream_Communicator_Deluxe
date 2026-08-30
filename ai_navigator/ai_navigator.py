@@ -35,6 +35,16 @@ from urllib.parse import urlparse, urljoin
 import threading
 import time
 
+# Qt WebEngine must receive Chromium flags before its modules are imported.
+# Older Windows graphics drivers can produce a permanently blank browser pane
+# with hardware acceleration enabled. Respect any explicit caller setting.
+if sys.platform == "win32" and not os.environ.get(
+    "QTWEBENGINE_CHROMIUM_FLAGS", ""
+).strip():
+    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
+        "--disable-gpu --disable-gpu-compositing"
+    )
+
 from PySide6.QtCore import (
     Qt,
     QSize,
