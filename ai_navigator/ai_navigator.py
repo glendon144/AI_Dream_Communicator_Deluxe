@@ -36,13 +36,22 @@ import threading
 import time
 
 # Qt WebEngine must receive Chromium flags before its modules are imported.
-# Older Windows graphics drivers can produce a permanently blank browser pane
-# with hardware acceleration enabled. Respect any explicit caller setting.
+# Configure both renderers before importing Qt.  This suite embeds Qt Quick
+# panes and Qt WebEngine in one top-level window, so Linux software rendering
+# must cover both stacks; disabling Chromium's GPU alone leaves QQuickWidget's
+# shared backing store unpainted (a transparent-looking window).
 if sys.platform == "win32" and not os.environ.get(
     "QTWEBENGINE_CHROMIUM_FLAGS", ""
 ).strip():
     os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
         "--disable-gpu --disable-gpu-compositing"
+    )
+elif sys.platform.startswith("linux"):
+    os.environ.setdefault("QT_QUICK_BACKEND", "software")
+    os.environ.setdefault("QTWEBENGINE_DISABLE_GPU", "1")
+    os.environ.setdefault(
+        "QTWEBENGINE_CHROMIUM_FLAGS",
+        "--disable-gpu --disable-gpu-compositing --disable-features=Vulkan",
     )
 
 from PySide6.QtCore import (
