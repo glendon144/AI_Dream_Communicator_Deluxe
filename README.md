@@ -20,9 +20,7 @@ persistence layer without changing the user workflow.
 ## Run
 
 ```bash
-cd ai_navigator
-source ~/.venvs/ai_navigator/bin/activate
-python ai_navigator.py
+./start_ai_navigator
 ```
 
 The launch tabs prefer `~/.venvs/ai_communicator` when it exists. Until the products are fully refactored around one shared environment, they fall back to:

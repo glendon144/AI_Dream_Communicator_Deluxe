@@ -4686,23 +4686,15 @@ class SuiteShell(QWidget):
 
 
 def main():
-    existing_flags = os.environ.get("QTWEBENGINE_CHROMIUM_FLAGS", "")
-    diagnostic_flags = "--no-sandbox --enable-logging=stderr --v=1"
-    os.environ["QTWEBENGINE_CHROMIUM_FLAGS"] = (
-        f"{existing_flags} {diagnostic_flags}".strip()
-    )
-    os.environ.setdefault("QTWEBENGINE_REMOTE_DEBUGGING", "9222")
     print(
         "[media] Chromium flags=" + os.environ["QTWEBENGINE_CHROMIUM_FLAGS"],
         file=sys.stderr,
         flush=True,
     )
-    print(
-        "[media] Remote DevTools: http://127.0.0.1:"
-        + os.environ["QTWEBENGINE_REMOTE_DEBUGGING"],
-        file=sys.stderr,
-        flush=True,
-    )
+    if hasattr(Qt, "HighDpiScaleFactorRoundingPolicy"):
+        QGuiApplication.setHighDpiScaleFactorRoundingPolicy(
+            Qt.HighDpiScaleFactorRoundingPolicy.PassThrough
+        )
     app = QApplication(sys.argv)
     w = SuiteShell()
     w.show()

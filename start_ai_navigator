@@ -3,4 +3,30 @@
 set -euo pipefail
 
 suite_dir="$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)"
-exec python3 "$suite_dir/ai_navigator/ai_navigator.py" "$@"
+# Prefer the suite environment, while retaining compatibility with the older
+# AI Navigator environment documented by earlier releases.
+python_exe=""
+for candidate in \
+    "$HOME/.venvs/ai_dream_communicator_deluxe/bin/python3" \
+    "$HOME/.venvs/ai_navigator/bin/python3"; do
+    if [[ -x "$candidate" ]] && "$candidate" -c \
+        'import PySide6.QtWebEngineWidgets, bs4' >/dev/null 2>&1; then
+        python_exe="$candidate"
+        break
+    fi
+done
+
+if [[ -z "$python_exe" ]]; then
+    python_exe="$(command -v python3 || true)"
+fi
+
+if [[ -z "$python_exe" ]] || ! "$python_exe" -c \
+    'import PySide6.QtWebEngineWidgets, bs4' >/dev/null 2>&1; then
+    echo "AI Dream Communicator dependencies are missing." >&2
+    echo "Install them with: python3 -m pip install -r $suite_dir/requirements.txt" >&2
+    exit 1
+fi
+
+export QTWEBENGINE_DISABLE_GPU="${QTWEBENGINE_DISABLE_GPU:-1}"
+export QTWEBENGINE_CHROMIUM_FLAGS="${QTWEBENGINE_CHROMIUM_FLAGS:---disable-gpu --disable-gpu-compositing}"
+exec "$python_exe" "$suite_dir/ai_navigator/ai_navigator.py" "$@"
