@@ -81,7 +81,7 @@ def test_webmcp_button_shows_webmcp_right_of_browser(navigator, qtbot):
     mid_sizes = navigator.mid_splitter.sizes()
     assert navigator.webmcp_pane.isVisible()
     assert mid_sizes[3] > 0 or navigator.webmcp_pane.width() > 0
-    for i in (0, 1, 2):
+    for i in (0, 1, 2, 4):
         widget = navigator.mid_splitter.widget(i)
         assert mid_sizes[i] == 0 or widget.isHidden()
 
@@ -94,6 +94,7 @@ def test_all_panes_button_shows_all_panes(navigator, qtbot):
         navigator.memory_pane,
         navigator.gmail_pane,
         navigator.webmcp_pane,
+        navigator.ai_pane,
     ):
         assert pane.isVisible()
 
@@ -116,6 +117,23 @@ def test_sequential_clicks_swap_panes_correctly(navigator, qtbot):
     assert (
         navigator.mid_splitter.sizes()[3] > 0
     )
+
+
+def test_ai_pane_collapses_and_reopens_with_conversation(navigator, qtbot):
+    navigator.ai_pane.messages.append(
+        __import__("ai_assistant_pane").ConversationMessage("user", "Remember me")
+    )
+    _click_button(qtbot, navigator, navigator.ai_menu_button)
+    assert navigator.ai_pane.isVisible()
+    assert navigator.mid_splitter.sizes()[4] > 0
+
+    qtbot.mouseClick(navigator.ai_pane.close_button, Qt.LeftButton)
+    qtbot.wait(50)
+    assert navigator.ai_pane.isHidden()
+
+    _click_button(qtbot, navigator, navigator.ai_menu_button)
+    assert navigator.ai_pane.isVisible()
+    assert navigator.ai_pane.messages[0].content == "Remember me"
 
 
 def test_browser_focus_then_pane_restores_correctly(navigator, qtbot):

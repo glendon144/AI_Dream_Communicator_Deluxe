@@ -131,6 +131,7 @@ from grab_screenshot import (
     copy_image_to_clipboard,
     grab_screenshot,
 )
+from ai_assistant_pane import AIAssistantPane
 
 # ---------------------------------------------------------------------------
 # Paths
@@ -3849,11 +3850,12 @@ class WebMCPActionsPane(QWidget):
 
 class MainWindow(QWidget):
     """
-    5-pane layout:
-      BrowserPane | ResultsPane | MemoryPane | GmailPane | WebMCPActionsPane
+    Browser plus persistent optional workspace panes, including AI Assistant.
     """
 
     productHandoffRequested = Signal(str, str, str, int)
+    aiContextReady = Signal(str, str)
+    aiContextFailed = Signal(str)
 
     def __init__(self):
         super().__init__()
@@ -3872,6 +3874,7 @@ class MainWindow(QWidget):
         self.results_pane.set_browser_view(self.browser_pane.view)
         self.gmail_pane = GmailPane(browser_pane=self.browser_pane)
         self.webmcp_pane = WebMCPActionsPane(self.browser_pane)
+        self.ai_pane = AIAssistantPane()
         self._browser_focus_active = False
         self._saved_outer_splitter_sizes = None
         self._saved_mid_splitter_sizes = None
@@ -3883,16 +3886,22 @@ class MainWindow(QWidget):
         self.results_pane.handoffRequested.connect(self.productHandoffRequested.emit)
         self.memory_pane.openUrlRequested.connect(self.browser_pane.load_from_memory)
         self.browser_pane.browserFocusRequested.connect(self._toggle_browser_focus)
+        self.ai_pane.contextRequested.connect(self._update_ai_context)
+        self.ai_pane.closeRequested.connect(self._close_ai_pane)
+        self.aiContextReady.connect(self.ai_pane.set_context)
+        self.aiContextFailed.connect(self.ai_pane.context_failed)
 
         self.mid_splitter = PaneSplitter(Qt.Horizontal)
         self.mid_splitter.addWidget(self.results_pane)
         self.mid_splitter.addWidget(self.memory_pane)
         self.mid_splitter.addWidget(self.gmail_pane)
         self.mid_splitter.addWidget(self.webmcp_pane)
+        self.mid_splitter.addWidget(self.ai_pane)
         # Start WebMCP compact so both browser panes remain visible without
         # requiring the user to resize the actions pane first.
-        self.mid_splitter.setSizes([300, 320, 0, 300])
+        self.mid_splitter.setSizes([300, 320, 0, 300, 0])
         self.gmail_pane.hide()
+        self.ai_pane.hide()
         for index in range(self.mid_splitter.count()):
             self.mid_splitter.setCollapsible(index, True)
 
@@ -3922,6 +3931,7 @@ class MainWindow(QWidget):
         self.memory_menu_button = QPushButton("Memory")
         self.gmail_menu_button = QPushButton("Gmail")
         self.webmcp_menu_button = QPushButton("WebMCP")
+        self.ai_menu_button = QPushButton("AI Assistant")
         self.restore_menu_button = QPushButton("All Panes")
 
         for button in (
@@ -3930,6 +3940,7 @@ class MainWindow(QWidget):
             self.memory_menu_button,
             self.gmail_menu_button,
             self.webmcp_menu_button,
+            self.ai_menu_button,
             self.restore_menu_button,
         ):
             _set_button_role(button, "secondary")
@@ -3942,6 +3953,7 @@ class MainWindow(QWidget):
         self.memory_menu_button.clicked.connect(lambda: self._focus_side_pane(1))
         self.gmail_menu_button.clicked.connect(lambda: self._focus_side_pane(2))
         self.webmcp_menu_button.clicked.connect(lambda: self._focus_side_pane(3))
+        self.ai_menu_button.clicked.connect(lambda: self._focus_side_pane(4))
         self.restore_menu_button.clicked.connect(self._restore_default_layout)
 
         self.top_splitter = QSplitter(Qt.Vertical)
@@ -4036,7 +4048,52 @@ class MainWindow(QWidget):
         for i in range(self.mid_splitter.count()):
             self.mid_splitter.widget(i).show()
         self.outer_splitter.setSizes([900, 700])
-        self.mid_splitter.setSizes([300, 320, 360, 420])
+        self.mid_splitter.setSizes([300, 320, 360, 420, 420])
+
+    def _close_ai_pane(self):
+        """Collapse the pane without clearing its in-memory conversation."""
+        self.ai_pane.hide()
+        sizes = self.mid_splitter.sizes()
+        if len(sizes) > 4:
+            sizes[4] = 0
+            self.mid_splitter.setSizes(sizes)
+        self.outer_splitter.set_sizes_allowing_full_collapse(
+            [max(self.outer_splitter.width(), 1), 0]
+        )
+
+    def _update_ai_context(self):
+        """Build the existing capped capsule only after an explicit user action."""
+        url = self.browser_pane.view.url().toString() or "about:blank"
+        title = self.browser_pane.view.title() or url
+
+        def got_html(raw_html: str):
+            # Reader cleanup can be expensive on webmail and infinite-scroll
+            # pages, so keep it off Qt's event loop.  Only the capped capsule
+            # crosses back to the UI thread.
+            def build():
+                try:
+                    reader_html = sanitize_html_for_reader(raw_html or "")
+                    soup = _parse_html_document(reader_html)
+                    snippet = soup.get_text(" ", strip=True)[:500]
+                    capsule = build_context_capsule_for_snapshot(
+                        title=title,
+                        url=url,
+                        captured_at=datetime.now().astimezone().isoformat(
+                            timespec="seconds"
+                        ),
+                        snippet=snippet,
+                        body=reader_html,
+                        hard_cap_chars=6500,
+                    )
+                    self.aiContextReady.emit(capsule, f"{title} ({url})")
+                except Exception as exc:
+                    self.aiContextFailed.emit(str(exc))
+
+            threading.Thread(
+                target=build, name="ai-pane-context", daemon=True
+            ).start()
+
+        self.browser_pane.view.page().toHtml(got_html)
 
     def _expand_browser_focus(self):
         if self._browser_focus_active:
@@ -4096,8 +4153,10 @@ class MainWindow(QWidget):
         self.mid_splitter.setSizes(sizes)
 
     def _handle_page_loaded(self, url_str: str):
-        # Hook point for future auto-archive/diff logic.
-        pass
+        # Navigation never sends data or resets the conversation.  It only
+        # warns that the last explicitly approved capsule describes an older
+        # page, leaving refresh under user control.
+        self.ai_pane.mark_context_stale()
 
     def _handle_archive_request(self, url: str, title: str, html: str):
         save_archive_page(DB_PATH, url, title, html)
