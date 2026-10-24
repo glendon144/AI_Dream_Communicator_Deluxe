@@ -66,7 +66,8 @@ class DocumentStore:
 
     def get_document_index(self):
         """
-        Return[{'id': .., 'title': .., 'description': ..}, ...] -
+        Return[{'id': .., 'title': .., 'body': .., 'description': ..}, ...] -
+        'body' is the full payload used by the index pane to calculate size;
         'description' is a 60-char preview for text docs,
         or "[12345 bytes]" for binary (images, PDFs, ...).
         """
@@ -84,7 +85,7 @@ class DocumentStore:
             else:
                 # text - first 60 chars, single-line
                 desc = body[:60].replace("\n", " ").replace("\r", " ")
-            result.append({"id": row["id"], "title": row["title"], "description": desc})
+            result.append({"id": row["id"], "title": row["title"], "body": body, "description": desc})
         return result
 
     def get_document(self, doc_id):
