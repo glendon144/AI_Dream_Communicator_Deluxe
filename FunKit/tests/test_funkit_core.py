@@ -557,3 +557,19 @@ def test_core_import_failure_never_uses_relative_fallback():
     assert result.returncode == 0, result.stderr
     assert "CLEAR_IMPORT_ERROR" in result.stdout
     assert "no known parent package" not in result.stdout
+
+
+def test_ask_context_bounds_large_document_and_finds_late_relevant_text(tmp_path):
+    core = _core(tmp_path)
+    body = "Introduction " + "unrelated material " * 4000 + "\nZeppelin maintenance requires helium."
+    doc_id = core.doc_store.add_document("Airship manual", body)
+    prompt = core.build_ask_prompt("What does Zeppelin maintenance require?", doc_id)
+    assert "Airship manual" in prompt
+    assert "Introduction" in prompt
+    assert "Zeppelin maintenance requires helium" in prompt
+    assert "Partial document" in prompt
+    assert len(prompt) < 12000
+
+
+def test_ask_without_document_preserves_question(tmp_path):
+    assert _core(tmp_path).build_ask_prompt("Hello") == "Hello"

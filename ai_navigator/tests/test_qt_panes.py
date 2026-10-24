@@ -517,3 +517,32 @@ def test_pikit_pane_transfer_prompt_accept_imports(qtbot, tmp_path, monkeypatch)
     assert response["imported_doc_id"] == new_doc_id
     core.accept_incoming_document.assert_called_once_with(invite)
     assert pane.current_doc_id == new_doc_id
+
+
+@pytest.mark.parametrize("command", ["How does this work?", "$ ASK How does this work?"])
+@pytest.mark.parametrize("select_text", [False, True])
+def test_funkit_ask_sends_selected_document_context(qtbot, tmp_path, command, select_text):
+    from PySide6.QtGui import QTextCursor
+
+    core = _funkit_core(tmp_path)
+    core.ai.query = MagicMock(return_value="Contextual reply")
+    core.doc_store.add_document("Other document", "UNRELATED DOCUMENT")
+    doc_id = core.doc_store.add_document("Chosen document", "Highlighted passage. PRIVATE REMAINDER")
+    pane = qt_panes.FunKitPane(tmp_path / "funkit", core=core)
+    qtbot.addWidget(pane)
+    pane.reveal_document(doc_id)
+    if select_text:
+        cursor = pane.viewer.textCursor()
+        cursor.setPosition(0)
+        cursor.setPosition(len("Highlighted passage."), QTextCursor.KeepAnchor)
+        pane.viewer.setTextCursor(cursor)
+    pane.command_line.setText(command)
+    pane.command_line.returnPressed.emit()
+    qtbot.waitUntil(lambda: "Contextual reply" in pane.viewer.toPlainText(), timeout=5000)
+    prompt = core.ai.query.call_args.args[0]
+    assert "explicit reference to the selected document" in prompt
+    assert "Chosen document" in prompt
+    assert "Highlighted passage." in prompt
+    assert "UNRELATED DOCUMENT" not in prompt
+    assert ("PRIVATE REMAINDER" in prompt) is not select_text
+    assert "How does this work?" in prompt

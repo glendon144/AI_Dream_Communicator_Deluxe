@@ -285,6 +285,15 @@ class KitPaneBase(QWidget):
 
     def _ask(self, text: str) -> None:
         self.statusMessage.emit(f"ASK: {text[:200]}")
+        if hasattr(self.core, "build_ask_prompt"):
+            selection = ""
+            if self.content_stack.currentWidget() is self.viewer:
+                selection = self.viewer.textCursor().selectedText().replace("\u2029", "\n")
+            try:
+                text = self.core.build_ask_prompt(text, self.current_doc_id, selection)
+            except Exception as exc:
+                self.statusMessage.emit(f"ASK context failed: {exc}")
+                return
         if hasattr(self.core, "ask_question_async"):
             # Non-blocking: worker thread + worker-owned SQLite connections;
             # the reply is marshaled back through the askFinished signal.
@@ -312,6 +321,11 @@ class KitPaneBase(QWidget):
             self.statusMessage.emit("ASK returned no reply.")
 
     def _run_dollar_command(self, text: str) -> None:
+        command = text[1:].strip().split(maxsplit=1)
+        if (command and command[0].upper() == "ASK"
+                and len(command) == 2 and hasattr(self.core, "build_ask_prompt")):
+            self._ask(command[1])
+            return
         result = self.core.run_command(text[1:].strip())
         if not result.handled:
             self.statusMessage.emit(result.output or "[no handler matched]")
